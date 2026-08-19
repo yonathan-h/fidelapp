@@ -1,7 +1,9 @@
 // thin wrapper around the backend, one function per route
 // token kept in memory, not localStorage -- no persistence across reloads yet
 
-const API_BASE = "http://localhost:8000";
+// set VITE_API_BASE_URL in the deployed environment (see .env.example) -- falls back to
+// the local dev backend so `npm run dev` keeps working with no env setup
+const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
 
 function extractErrorMessage(body) {
   // detail is usually a plain string, but validation errors come back as

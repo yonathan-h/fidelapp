@@ -18,11 +18,18 @@ export async function requireAuth(req, res, next) {
     return res.status(401).json({ detail: "Could not validate credentials." });
   }
 
-  const user = await User.findOne({ where: { email } });
-  if (!user) {
-    return res.status(401).json({ detail: "Could not validate credentials." });
+  // Express 4 doesn't auto-catch rejected promises in async middleware -- without this,
+  // a DB error here becomes an unhandled rejection and the request just hangs forever
+  // instead of getting a response
+  try {
+    const user = await User.findOne({ where: { email } });
+    if (!user) {
+      return res.status(401).json({ detail: "Could not validate credentials." });
+    }
+    req.user = user;
+    next();
+  } catch (err) {
+    console.error("error looking up user during auth:", err);
+    res.status(500).json({ detail: "Failed to validate credentials." });
   }
-
-  req.user = user;
-  next();
 }

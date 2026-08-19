@@ -14,13 +14,15 @@ const app = express();
 
 app.use(express.json());
 
+// CORS_ORIGINS is a comma-separated list, so the deployed frontend's origin can be added
+// via an env var on the host instead of a code change -- see .env.example
+const allowedOrigins = process.env.CORS_ORIGINS
+  ? process.env.CORS_ORIGINS.split(",").map((origin) => origin.trim())
+  : ["http://localhost:5173", "http://localhost:3000"];
+
 app.use(
   cors({
-    origin: [
-      "http://localhost:5173",
-      "http://localhost:3000",
-      // add render frontend url here before deploy
-    ],
+    origin: allowedOrigins,
     credentials: true,
   })
 );

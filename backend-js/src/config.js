@@ -3,9 +3,20 @@
 import dotenv from "dotenv";
 dotenv.config();
 
+// fail fast and loud instead of silently falling back to an insecure default --
+// a hardcoded SECRET_KEY fallback would mean anyone who reads this source (it's
+// public) can forge a valid JWT for any user if the real env var is ever unset
+function requireEnv(name) {
+  const value = process.env[name];
+  if (!value) {
+    throw new Error(`Missing required environment variable: ${name}. Set it in backend-js/.env (see .env.example).`);
+  }
+  return value;
+}
+
 export const config = {
-  databaseUrl: process.env.DATABASE_URL || "postgresql://postgres:postgres@localhost:5432/fidel_app",
-  secretKey: process.env.SECRET_KEY || "dev-only-not-a-real-secret-change-me", // override this in prod
+  databaseUrl: requireEnv("DATABASE_URL"),
+  secretKey: requireEnv("SECRET_KEY"),
   accessTokenExpiresIn: "7d",
   port: process.env.PORT || 8000,
 };

@@ -521,20 +521,11 @@ export default function App() {
   }
 
   return (
-    <div style={{ display: "flex", height: "100vh" }}>
-      {/* sidebar */}
-      <div
-        style={{
-          width: "260px",
-          borderRight: "2px solid var(--sage)",
-          padding: "var(--space-medium) var(--space-tight)",
-          overflowY: "auto",
-          height: "100vh",
-          boxSizing: "border-box",
-          flexShrink: 0,
-          background: "var(--paper-deep)",
-        }}
-      >
+    <div className="app-shell">
+      {/* sidebar -- layout (width/height/scroll) lives in .app-sidebar in theme.css so a
+          mobile breakpoint can restack this from a side panel to a capped-height top strip,
+          which inline styles can't be overridden by a media query */}
+      <div className="app-sidebar">
         <div
           className="font-display"
           style={{
@@ -710,7 +701,7 @@ export default function App() {
       </div>
 
       {/* main practice area */}
-      <div style={{ flex: 1, padding: "var(--space-generous)", height: "100vh", overflowY: "auto", boxSizing: "border-box" }}>
+      <div className="app-main">
         <div style={{ maxWidth: "760px", margin: "0 auto" }}>
           {mode === "words" && currentWordData && (
             <div style={{ textAlign: "center", marginBottom: "var(--space-medium)" }}>

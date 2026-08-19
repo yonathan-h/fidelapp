@@ -1,0 +1,26 @@
+# Render Blueprint -- deploys the backend + a free Postgres database in one step.
+# In the Render dashboard: New > Blueprint > pick this repo. Render reads this file
+# automatically.
+services:
+  - type: web
+    name: fidel-backend
+    runtime: node
+    plan: free
+    rootDir: backend-js
+    buildCommand: npm install
+    startCommand: node src/server.js
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: fidel-db
+          property: connectionString
+      - key: SECRET_KEY
+        generateValue: true # Render generates a random secure value, you never see/type it
+      - key: CORS_ORIGINS
+        sync: false # set manually after the frontend is deployed, see DEPLOY.md
+      - key: PORT
+        value: 8000
+
+databases:
+  - name: fidel-db
+    plan: free

@@ -145,6 +145,22 @@ body {
   border-color: var(--sage);
   color: var(--sage-deep);
 }
+.btn-secondary:disabled {
+  color: var(--line);
+  border-color: var(--line);
+  cursor: default;
+}
+.btn-secondary:disabled:hover {
+  border-color: var(--line);
+  color: var(--line);
+}
+
+/* visible only for keyboard focus (not mouse clicks) -- buttons had no focus indicator
+   at all before this, which fails basic keyboard-navigation accessibility */
+.btn:focus-visible {
+  outline: 2px solid var(--sage-deep);
+  outline-offset: 2px;
+}
 
 .field-input {
   width: 100%;
@@ -160,6 +176,62 @@ body {
 .field-input:focus {
   outline: none;
   border-color: var(--sage);
+}
+.field-input:focus-visible {
+  outline: 2px solid var(--sage);
+  outline-offset: 1px;
+}
+.field-input:disabled {
+  background: var(--paper-deep);
+  color: var(--ink-soft);
+  cursor: default;
+}
+
+/* app shell layout -- lives here (not inline styles) specifically so the mobile
+   breakpoint below can override it; a plain external media query can't win against an
+   inline style attribute */
+.app-shell {
+  display: flex;
+  height: 100vh;
+}
+.app-sidebar {
+  width: 260px;
+  border-right: 2px solid var(--sage);
+  padding: var(--space-medium) var(--space-tight);
+  overflow-y: auto;
+  height: 100vh;
+  box-sizing: border-box;
+  flex-shrink: 0;
+  background: var(--paper-deep);
+}
+.app-main {
+  flex: 1;
+  padding: var(--space-generous);
+  height: 100vh;
+  overflow-y: auto;
+  box-sizing: border-box;
+  min-width: 0; /* lets flex children shrink below their content width instead of overflowing */
+}
+
+/* below this, a side-by-side 260px sidebar would eat most of the screen -- stack
+   instead, with the sidebar as a capped-height, independently scrollable strip on top */
+@media (max-width: 760px) {
+  .app-shell {
+    flex-direction: column;
+    height: auto;
+    min-height: 100vh;
+  }
+  .app-sidebar {
+    width: 100%;
+    height: auto;
+    max-height: 40vh;
+    border-right: none;
+    border-bottom: 2px solid var(--sage);
+  }
+  .app-main {
+    height: auto;
+    padding: var(--space-medium) var(--space-tight);
+  }
 }
 
 /* stroke-order demo: reveals a path (pathLength=1, so dasharray/dashoffset are unitless)
