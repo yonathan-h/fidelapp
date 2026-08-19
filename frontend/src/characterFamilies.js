@@ -3,26 +3,35 @@
 // sidebar list, which scattered related characters apart (e.g. sorting split "s" and
 // "sh" apart since "sh*" alphabetizes between "see" and "si").
 // each family's first entry is its bare/representative form, shown as the section header.
+//
+// both the family (row) order and the vowel-form (column) order below are the real
+// Ge'ez/Amharic fidel chart order -- derived from the Unicode Ethiopic block, which
+// assigns each family a contiguous range of code points in traditional recitation
+// order, and each family's 7 vowel forms in traditional order within that range
+// (verified against every character actually in reference_data/, by codepoint --
+// not assumed). that's why it starts with "h" (ሀ, U+1200, the first Ethiopic code
+// point) rather than "a", and why each row reads [1st order, u, i, a, e, bare
+// consonant, o] rather than alphabetically by romanization.
 export const CHARACTER_FAMILIES = [
-  ["a", "aa", "e", "i", "ie", "o", "u"],
-  ["b", "ba", "be", "bee", "bi", "bo", "bu"],
-  ["d", "da", "de", "dee", "di", "do", "du"],
-  ["f", "fa", "fe", "fee", "fi", "fo", "fu"],
-  ["g", "ga", "ge", "gee", "gi", "go", "gu"],
-  ["h", "ha", "haa", "he", "hi", "ho", "hu"],
-  ["j", "ja", "je", "jee", "ji", "jo", "ju"],
-  ["l", "la", "le", "lee", "li", "lo", "lu"],
-  ["m", "ma", "me", "mee", "mi", "mo", "mu"],
-  ["n", "na", "ne", "nee", "ni", "no", "nu"],
-  ["p", "pa", "pe", "pee", "pi", "po", "pu"],
-  ["p2", "pa2", "pe2", "pee2", "pi2", "po2", "pu2"],
-  ["q", "qa", "qe", "qee", "qi", "qo", "qu"],
-  ["r", "ra", "re", "ree", "ri", "ro", "ru"],
-  ["s", "sa", "se", "see", "si", "so", "su"],
-  ["sh", "sha", "she", "shee", "shi", "sho", "shu"],
-  ["t", "ta", "te", "tee", "ti", "to", "tu"],
-  ["t'", "ta'", "te'", "te'e", "ti'", "to'", "tu'"],
-  ["ts", "tsa", "tse", "tsee", "tsi", "tso", "tsu"],
-  ["w", "wa", "we", "wee", "wi", "wo", "wu"],
-  ["y", "ya", "ye", "yee", "yi", "yo", "yu"],
+  ["ha", "hu", "hi", "haa", "he", "h", "ho"],
+  ["le", "lu", "li", "la", "lee", "l", "lo"],
+  ["me", "mu", "mi", "ma", "mee", "m", "mo"],
+  ["re", "ru", "ri", "ra", "ree", "r", "ro"],
+  ["se", "su", "si", "sa", "see", "s", "so"],
+  ["she", "shu", "shi", "sha", "shee", "sh", "sho"],
+  ["qe", "qu", "qi", "qa", "qee", "q", "qo"],
+  ["be", "bu", "bi", "ba", "bee", "b", "bo"],
+  ["te", "tu", "ti", "ta", "tee", "t", "to"],
+  ["ne", "nu", "ni", "na", "nee", "n", "no"],
+  ["a", "u", "i", "aa", "e", "ie", "o"],
+  ["we", "wu", "wi", "wa", "wee", "w", "wo"],
+  ["ye", "yu", "yi", "ya", "yee", "y", "yo"],
+  ["de", "du", "di", "da", "dee", "d", "do"],
+  ["je", "ju", "ji", "ja", "jee", "j", "jo"],
+  ["ge", "gu", "gi", "ga", "gee", "g", "go"],
+  ["te'", "tu'", "ti'", "ta'", "te'e", "t'", "to'"],
+  ["pe", "pu", "pi", "pa", "pee", "p", "po"],
+  ["tse", "tsu", "tsi", "tsa", "tsee", "ts", "tso"],
+  ["fe", "fu", "fi", "fa", "fee", "f", "fo"],
+  ["pe2", "pu2", "pi2", "pa2", "pee2", "p2", "po2"],
 ];

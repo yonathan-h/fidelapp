@@ -2,9 +2,47 @@ import { useEffect, useState, useCallback, useMemo } from "react";
 import { signup, login, getCharacters, getWords, submitAttempt, getProgress, getHistory, getMe } from "./api";
 import { useStrokeCanvas } from "./useStrokeCanvas";
 import { CHARACTER_FAMILIES } from "./characterFamilies";
+import {
+  smoothStrokePath,
+  computeStrokeTiming,
+  demoFadeOutDelay,
+  assignStrokesToSlots,
+  DEMO_FADE_MS,
+} from "./strokeGeometry";
 
 const CANVAS_SIZE = 280;
 const PASS_THRESHOLD = 70; // matches backend's feedback.js threshold
+
+// word-mode canvas: one row of fixed-width letter slots instead of cycling through a
+// separate single-letter canvas per letter. sized so the longest word/phrase currently in
+// words.js (8 letters) still comfortably fits the 760px practice column
+const WORD_LETTER_SLOT = 80;
+const WORD_LETTER_GAP = 5;
+const WORD_CHUNK_GAP = 18; // extra gap at a space boundary between chunks (sub-words)
+const WORD_CAPTION_HEIGHT = 16; // headroom above each slot for its romanization label
+
+// --sage-deep and --paper-deep from theme.css, duplicated here as plain rgb so the
+// progress grid can compute a real blended background color (not just CSS opacity, which
+// would fade the glyph text along with the cell instead of only darkening the background)
+const SAGE_DEEP_RGB = [94, 117, 112];
+const PAPER_DEEP_RGB = [233, 231, 226];
+
+const CELL_LIGHT_TEXT_THRESHOLD = 60; // score at/above this gets white text, below gets black
+
+// background + text color for one progress-grid cell -- text color is a flat score
+// threshold, not a luminance cutoff: below CELL_LIGHT_TEXT_THRESHOLD reads as black,
+// at/above it as white, regardless of exactly how dark the tint is at that score
+function progressCellStyle(score) {
+  if (score == null) {
+    return { background: "var(--line)", color: "var(--ink)" };
+  }
+  const alpha = Math.max(0.15, score / 100);
+  const blend = SAGE_DEEP_RGB.map((sage, i) => alpha * sage + (1 - alpha) * PAPER_DEEP_RGB[i]);
+  return {
+    background: `rgb(${blend.map((v) => Math.round(v)).join(",")})`,
+    color: score >= CELL_LIGHT_TEXT_THRESHOLD ? "var(--paper)" : "var(--ink)",
+  };
+}
 
 // centers + uniformly scales the recorded reference strokes to fit the guide box --
 // mirrors scoring.js's own-bbox normalization, so the guide is the same shape being scored
@@ -28,35 +66,11 @@ function normalizeGuideStrokes(strokes, canvasSize, fillRatio = 0.85) {
     stroke.map((p) => ({
       x: (p.x - centerX) * scale + canvasCenter,
       y: (p.y - centerY) * scale + canvasCenter,
+      t: p.t,
     }))
   );
 }
 
-// direction near the end of a stroke -- averaged over the last few points instead of
-// just the last two, so it isn't thrown off by a single jittery sample at the tail
-function strokeEndDirection(stroke, lookback = 6) {
-  const end = stroke[stroke.length - 1];
-  const start = stroke[Math.max(0, stroke.length - 1 - lookback)];
-  const dx = end.x - start.x;
-  const dy = end.y - start.y;
-  const len = Math.hypot(dx, dy) || 1;
-  return { dx: dx / len, dy: dy / len };
-}
-
-// triangle points for an arrowhead at the end of a stroke, pointing in its draw direction
-function arrowheadPoints(stroke, size = 9, width = 7) {
-  const end = stroke[stroke.length - 1];
-  const { dx, dy } = strokeEndDirection(stroke);
-  const backX = end.x - dx * size;
-  const backY = end.y - dy * size;
-  const perpX = -dy;
-  const perpY = dx;
-  return [
-    `${end.x},${end.y}`,
-    `${backX + (perpX * width) / 2},${backY + (perpY * width) / 2}`,
-    `${backX - (perpX * width) / 2},${backY - (perpY * width) / 2}`,
-  ].join(" ");
-}
 
 export default function App() {
   const [token, setToken] = useState(null);
@@ -74,13 +88,14 @@ export default function App() {
   const [submitError, setSubmitError] = useState(null);
   const [submitting, setSubmitting] = useState(false);
 
-  // word/phrase practice -- a word is just its letters traced in sequence through the
-  // same single-character flow, so this only needs to track position within the word
+  // word/phrase practice -- the whole word is drawn on one multi-slot canvas (see
+  // WORD_LETTER_SLOT etc.) and checked as a whole; wordLetterResults/wordLetterMessages
+  // are populated per letter from that one check, not by cycling through letters
   const [mode, setMode] = useState("characters"); // "characters" | "words"
   const [words, setWords] = useState([]);
   const [currentWordIndex, setCurrentWordIndex] = useState(0);
-  const [currentLetterIndex, setCurrentLetterIndex] = useState(0);
   const [wordLetterResults, setWordLetterResults] = useState([]); // parallel to letterSequence: null | true | false
+  const [wordLetterMessages, setWordLetterMessages] = useState([]); // parallel to letterSequence: null | string[]
 
   const [progress, setProgress] = useState(null);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -151,17 +166,13 @@ export default function App() {
     return seq;
   }, [currentWordData]);
 
-  const isLastLetter = mode === "words" && currentLetterIndex === letterSequence.length - 1;
   const wordComplete =
     mode === "words" && letterSequence.length > 0 && letterSequence.every((_, i) => wordLetterResults[i] != null);
   const wordPassedCount = wordLetterResults.filter((r) => r === true).length;
 
-  // single source of truth for "what's on the canvas right now" -- a character selected
-  // directly, or the current letter of the word being practiced
-  const activeCharacterData =
-    mode === "words"
-      ? charactersByRomanization.get(letterSequence[currentLetterIndex]?.romanization) ?? null
-      : orderedCharacters[currentIndex] ?? null;
+  // single source of truth for "what's on the canvas right now", character mode only --
+  // word mode has no single "active" letter anymore, see wordSlotLayout etc. below
+  const activeCharacterData = mode === "characters" ? orderedCharacters[currentIndex] ?? null : null;
   const currentRomanization = activeCharacterData?.romanization ?? null;
   const currentCharacter = activeCharacterData?.character ?? null;
 
@@ -170,6 +181,69 @@ export default function App() {
     if (!activeCharacterData?.guideStrokes?.length) return [];
     return normalizeGuideStrokes(activeCharacterData.guideStrokes, CANVAS_SIZE - 3);
   }, [activeCharacterData]);
+
+  // smoothed path + playback schedule for the "watch it drawn" demo -- recomputed only
+  // when the underlying guide changes, not on every render
+  const guidePaths = useMemo(() => guideStrokes.map((stroke) => smoothStrokePath(stroke)), [guideStrokes]);
+  const guideTiming = useMemo(() => computeStrokeTiming(guideStrokes), [guideStrokes]);
+  const guideFadeDelay = useMemo(() => demoFadeOutDelay(guideTiming), [guideTiming]);
+
+  // one slot per letter, left to right, extra gap at each chunk (space) boundary --
+  // the word canvas, guide, and stroke-to-letter assignment on Check all key off this
+  const wordSlotLayout = useMemo(() => {
+    let cursor = 0;
+    return letterSequence.map((letter, i) => {
+      if (i > 0 && letterSequence[i - 1].chunkIndex !== letter.chunkIndex) cursor += WORD_CHUNK_GAP;
+      const x = cursor;
+      cursor += WORD_LETTER_SLOT + WORD_LETTER_GAP;
+      return { x, width: WORD_LETTER_SLOT };
+    });
+  }, [letterSequence]);
+
+  const wordCanvasWidth = wordSlotLayout.length === 0 ? 0 : wordSlotLayout[wordSlotLayout.length - 1].x + WORD_LETTER_SLOT;
+  const wordCanvasHeight = WORD_LETTER_SLOT + WORD_CAPTION_HEIGHT;
+
+  // shrinks as the word gets longer so the example script (mirroring the single big glyph
+  // in character mode) still fits the 760px practice column instead of overflowing it
+  const wordGlyphFontSize = Math.max(56, Math.min(140, 640 / Math.max(letterSequence.length, 1)));
+
+  // each letter's guide strokes normalized into its own slot box, then offset into place --
+  // same normalizeGuideStrokes used for single-character mode, just laid out side by side
+  const wordGuideStrokesBySlot = useMemo(() => {
+    return letterSequence.map((letter, i) => {
+      const letterData = charactersByRomanization.get(letter.romanization);
+      if (!letterData?.guideStrokes?.length) return [];
+      const normalized = normalizeGuideStrokes(letterData.guideStrokes, WORD_LETTER_SLOT, 0.78);
+      const offsetX = wordSlotLayout[i]?.x ?? 0;
+      return normalized.map((stroke) => stroke.map((p) => ({ ...p, x: p.x + offsetX, y: p.y + WORD_CAPTION_HEIGHT })));
+    });
+  }, [letterSequence, charactersByRomanization, wordSlotLayout]);
+
+  const wordGuidePathsBySlot = useMemo(
+    () => wordGuideStrokesBySlot.map((strokes) => strokes.map((s) => smoothStrokePath(s))),
+    [wordGuideStrokesBySlot]
+  );
+
+  // each letter's demo timing chained after the previous letter's -- computeStrokeTiming's
+  // own ~300ms lead-in before a letter's first stroke doubles as the pause between letters
+  const wordGuideTimingBySlot = useMemo(() => {
+    let cursor = 0;
+    return wordGuideStrokesBySlot.map((strokes) => {
+      const timing = computeStrokeTiming(strokes).map((t) => ({ delay: t.delay + cursor, duration: t.duration }));
+      if (timing.length > 0) cursor = Math.max(...timing.map((t) => t.delay + t.duration));
+      return timing;
+    });
+  }, [wordGuideStrokesBySlot]);
+
+  const wordGuideFadeDelay = useMemo(
+    () => demoFadeOutDelay(wordGuideTimingBySlot.flat()),
+    [wordGuideTimingBySlot]
+  );
+
+  // bumped to force the demo to replay even when the character/word hasn't changed --
+  // combined with currentRomanization/currentWordIndex in the key below so switching
+  // characters or words also auto-plays
+  const [demoReplayCount, setDemoReplayCount] = useState(0);
 
   const progressByRomanization = {};
   if (progress) {
@@ -197,8 +271,8 @@ export default function App() {
     setMode("characters");
     setWords([]);
     setCurrentWordIndex(0);
-    setCurrentLetterIndex(0);
     setWordLetterResults([]);
+    setWordLetterMessages([]);
     clear();
   }
 
@@ -215,19 +289,59 @@ export default function App() {
   }
 
   async function handleCheck() {
+    if (mode === "words") {
+      await handleCheckWord();
+      return;
+    }
     if (!currentRomanization) return;
     setSubmitting(true);
     setSubmitError(null);
     try {
       const data = await submitAttempt(token, currentRomanization, getStrokes());
       setResult(data);
-      if (mode === "words") {
-        setWordLetterResults((prev) => {
-          const updated = [...prev];
-          updated[currentLetterIndex] = data.passed;
-          return updated;
+      refreshProgress();
+    } catch (err) {
+      setSubmitError(err.message);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  // scores every letter that has at least one drawn stroke on the whole-word canvas --
+  // strokes are grouped by nearest slot (assignStrokesToSlots), then each group is sent
+  // to the same single-character /attempt endpoint used in character mode. scoring
+  // re-centers everything on its own bounding box, so the strokes' absolute position on
+  // the wide canvas doesn't need to be translated back to a per-letter coordinate space.
+  // letters left blank keep their previous result (or stay unattempted) rather than being
+  // scored as a hard fail, so Check can be clicked multiple times as the word fills in
+  async function handleCheckWord() {
+    const bySlot = assignStrokesToSlots(getStrokes(), wordSlotLayout);
+    const attempted = letterSequence
+      .map((letter, i) => ({ letter, i, strokes: bySlot[i] }))
+      .filter((entry) => entry.strokes.length > 0);
+
+    if (attempted.length === 0) return;
+
+    setSubmitting(true);
+    setSubmitError(null);
+    try {
+      const results = await Promise.all(
+        attempted.map((entry) => submitAttempt(token, entry.letter.romanization, entry.strokes))
+      );
+      setWordLetterResults((prev) => {
+        const updated = [...prev];
+        attempted.forEach((entry, idx) => {
+          updated[entry.i] = results[idx].passed;
         });
-      }
+        return updated;
+      });
+      setWordLetterMessages((prev) => {
+        const updated = [...prev];
+        attempted.forEach((entry, idx) => {
+          updated[entry.i] = results[idx].messages;
+        });
+        return updated;
+      });
       refreshProgress();
     } catch (err) {
       setSubmitError(err.message);
@@ -257,8 +371,8 @@ export default function App() {
   function goToWord(index) {
     setMode("words");
     setCurrentWordIndex(index);
-    setCurrentLetterIndex(0);
     setWordLetterResults([]);
+    setWordLetterMessages([]);
     setResult(null);
     setSubmitError(null);
     setHistoryOpen(false);
@@ -266,15 +380,7 @@ export default function App() {
   }
 
   function handleNext() {
-    if (mode === "words") {
-      if (isLastLetter) return;
-      setCurrentLetterIndex((i) => i + 1);
-      setResult(null);
-      setSubmitError(null);
-      clear();
-    } else {
-      goToCharacter((currentIndex + 1) % orderedCharacters.length);
-    }
+    goToCharacter((currentIndex + 1) % orderedCharacters.length);
   }
 
   async function toggleHistory() {
@@ -402,7 +508,9 @@ export default function App() {
     );
   }
 
-  if (!currentRomanization) {
+  // both modes' guides key off the character list (single glyph in character mode, every
+  // letter's guide in word mode), so that's the one load gate that covers either mode
+  if (characters.length === 0) {
     return (
       <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
         <p className="font-display" style={{ fontSize: "18px", color: "var(--ink-soft)" }}>
@@ -493,126 +601,56 @@ export default function App() {
 
         {mode === "characters" && (
           <>
+            <div className="label-eyebrow" style={{ marginBottom: "6px", padding: "0 8px" }}>
+              Characters
+            </div>
             {progress && (
-              <div style={{ marginBottom: "var(--space-medium)", padding: "0 8px" }}>
-                <div className="label-eyebrow" style={{ marginBottom: "6px" }}>
-                  Progress
-                </div>
-                <div style={{ fontSize: "14px", color: "var(--ink-soft)", marginBottom: "8px" }}>
-                  {progress.practiced_count} of {progress.total_characters} practiced
-                </div>
-                {/* one row per consonant family, one column per vowel form -- same shape as
-                    the traditional Fidel chart. gray = not attempted, sage intensity = best
-                    shape score, so mastery across the whole alphabet reads at a glance */}
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: "2px" }}>
-                  {orderedCharacters.map((c) => {
+              <div style={{ fontSize: "14px", color: "var(--ink-soft)", marginBottom: "10px", padding: "0 8px" }}>
+                {progress.practiced_count} of {progress.total_characters} practiced
+              </div>
+            )}
+
+            {/* one row per consonant family, one column per vowel form, in real Fidel chart
+                order (see characterFamilies.js) -- the glyph itself sits in each cell, so
+                this doubles as both the navigation list and the progress heatmap instead of
+                having two separate views of the same 147 characters. cell color is gray
+                (not attempted) or sage-tinted by best shape score; text color is picked
+                from that background's actual luminance so the glyph stays legible either way */}
+            <div style={{ display: "flex", flexDirection: "column", gap: "3px", padding: "0 8px" }}>
+              {groupedCharacters.map((family) => (
+                <div key={family.label} style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: "2px" }}>
+                  {family.members.map((c) => {
                     const p = progressByRomanization[c.romanization];
                     const score = p ? p.best_shape_score : null;
+                    const isCurrent = c.index === currentIndex && mode === "characters";
+                    const { background, color } = progressCellStyle(score);
                     return (
                       <button
                         key={c.romanization}
                         onClick={() => goToCharacter(c.index)}
-                        title={`${c.romanization} — ${score == null ? "not yet attempted" : `best score ${Math.round(score)}`}`}
+                        title={`${c.romanization}: ${score == null ? "not yet attempted" : `best score ${Math.round(score)}`}`}
+                        className="font-glyph"
                         style={{
                           aspectRatio: "1",
-                          border: "none",
-                          borderRadius: "2px",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          border: isCurrent ? "1.5px solid var(--ink)" : "1.5px solid transparent",
+                          borderRadius: "3px",
                           padding: 0,
                           cursor: "pointer",
-                          background: score == null ? "var(--line)" : "var(--sage-deep)",
-                          opacity: score == null ? 1 : Math.max(0.15, score / 100),
+                          fontSize: "13px",
+                          background,
+                          color,
                         }}
-                      />
+                      >
+                        {c.character}
+                      </button>
                     );
                   })}
                 </div>
-              </div>
-            )}
-
-            <div className="label-eyebrow" style={{ marginBottom: "10px", padding: "0 8px" }}>
-              Characters
+              ))}
             </div>
-            {groupedCharacters.map((family) => (
-              <div key={family.label} style={{ marginBottom: "var(--space-tight)" }}>
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "6px",
-                    padding: "6px 8px 2px",
-                    borderTop: "1px solid var(--line)",
-                  }}
-                >
-                  <span className="font-glyph" style={{ fontSize: "15px", color: "var(--sage-deep)" }}>
-                    {family.members[0].character}
-                  </span>
-                  <span className="label-eyebrow">{family.label}</span>
-                </div>
-                <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
-                  {family.members.map((c) => {
-                    const p = progressByRomanization[c.romanization];
-                    const isCurrent = c.index === currentIndex;
-                    const passed = p ? p.best_shape_score >= PASS_THRESHOLD : false;
-                    return (
-                      <li key={c.romanization}>
-                        <button
-                          onClick={() => goToCharacter(c.index)}
-                          style={{
-                            width: "100%",
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "space-between",
-                            textAlign: "left",
-                            padding: "7px 8px",
-                            fontFamily: "Inter, sans-serif",
-                            fontSize: "14px",
-                            fontWeight: isCurrent ? 600 : 400,
-                            // active state is text weight + underline, not a colored box --
-                            // keeps it in the same typographic language as everything else.
-                            // longhand textDecorationLine (not the textDecoration shorthand) --
-                            // mixing shorthand + longhand decoration props in the same style
-                            // object trips a react warning when isCurrent toggles between renders
-                            textDecorationLine: isCurrent ? "underline" : "none",
-                            textDecorationColor: "var(--sage-deep)",
-                            textDecorationThickness: "2px",
-                            textUnderlineOffset: "4px",
-                            background: "transparent",
-                            border: "none",
-                            cursor: "pointer",
-                            color: "var(--ink)",
-                          }}
-                        >
-                          <span>
-                            <span className="font-glyph" style={{ marginRight: "6px" }}>
-                              {c.character}
-                            </span>
-                            <span style={{ color: "var(--ink-soft)" }}>{c.romanization}</span>
-                          </span>
-                          {passed ? (
-                            <span style={{ fontSize: "13px", fontWeight: 700, color: "var(--sage-deep)" }} aria-label="Passed">
-                              ✓
-                            </span>
-                          ) : (
-                            p && (
-                              <span
-                                style={{
-                                  width: "6px",
-                                  height: "6px",
-                                  borderRadius: "50%",
-                                  background: "var(--ink-soft)",
-                                  display: "inline-block",
-                                }}
-                                aria-label="Attempted, not yet passed"
-                              />
-                            )
-                          )}
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </div>
-            ))}
           </>
         )}
 
@@ -675,138 +713,316 @@ export default function App() {
       <div style={{ flex: 1, padding: "var(--space-generous)", height: "100vh", overflowY: "auto", boxSizing: "border-box" }}>
         <div style={{ maxWidth: "760px", margin: "0 auto" }}>
           {mode === "words" && currentWordData && (
-            <div style={{ textAlign: "center", marginBottom: "var(--space-tight)" }}>
-              <div className="label-eyebrow" style={{ marginBottom: "10px" }}>
-                {currentWordData.meaning} &middot; letter {currentLetterIndex + 1} of {letterSequence.length}
+            <div style={{ textAlign: "center", marginBottom: "var(--space-medium)" }}>
+              <div
+                style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", marginBottom: "14px" }}
+              >
+                <div className="label-eyebrow">
+                  {currentWordData.meaning} &middot; {letterSequence.length} {letterSequence.length === 1 ? "letter" : "letters"}
+                </div>
+                {/* replays the whole word's stroke-order demo -- bumping demoReplayCount
+                    changes the <g> key below, forcing it to remount and restart */}
+                <button
+                  type="button"
+                  onClick={() => setDemoReplayCount((n) => n + 1)}
+                  title="Watch it drawn again"
+                  aria-label="Watch it drawn again"
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    width: "20px",
+                    height: "20px",
+                    padding: 0,
+                    border: "1px solid var(--line)",
+                    borderRadius: "50%",
+                    background: "transparent",
+                    color: "var(--sage-deep)",
+                    fontSize: "10px",
+                    cursor: "pointer",
+                  }}
+                >
+                  ▶
+                </button>
               </div>
-              {/* the full word, current letter highlighted -- built from the same
-                  per-letter data as the canvas below rather than the raw text string,
-                  so highlighting always lines up with what's actually being scored */}
-              <div className="font-glyph" style={{ fontSize: "44px", lineHeight: 1, userSelect: "none" }}>
-                {letterSequence.map((letter, i) => {
-                  const letterData = charactersByRomanization.get(letter.romanization);
-                  const needsGapBefore = i > 0 && letterSequence[i - 1].chunkIndex !== letter.chunkIndex;
-                  return (
-                    <span
-                      key={i}
-                      style={{
-                        marginLeft: needsGapBefore ? "0.35em" : 0,
-                        color: i === currentLetterIndex ? "var(--sage-deep)" : "var(--ink)",
-                        opacity: i === currentLetterIndex ? 1 : 0.4,
-                      }}
+
+              {/* example script, same role as the single big glyph in character mode --
+                  sized down as the word gets longer so it still fits the practice column */}
+              <div
+                className="font-glyph"
+                style={{
+                  fontSize: `${wordGlyphFontSize}px`,
+                  lineHeight: 1,
+                  color: "var(--ink)",
+                  margin: "0 0 var(--space-medium)",
+                  userSelect: "none",
+                }}
+              >
+                {currentWordData.text}
+              </div>
+
+              <div style={{ display: "flex", justifyContent: "center", marginBottom: "var(--space-tight)", overflowX: "auto" }}>
+                {/* corner-tick frame around the writing surface, like a bordered page rather
+                    than a plain input box -- see .page-frame in theme.css */}
+                <div className="page-frame">
+                  <span className="page-frame-tick-tr" />
+                  <span className="page-frame-tick-bl" />
+                  <div
+                    style={{
+                      width: wordCanvasWidth,
+                      height: wordCanvasHeight,
+                      border: "1.5px solid var(--ink)", // the one element that gets a real border -- it's the writing surface
+                      background: "white",
+                      position: "relative",
+                    }}
+                  >
+                    {/* one wide canvas holding every letter of the word in its own slot,
+                        instead of cycling through a separate single-letter canvas per
+                        letter -- same ghost + self-drawing demo idea as character mode
+                        (see strokeGeometry.js), just laid out side by side and chained in
+                        sequence so the whole word "writes itself" once per load/replay */}
+                    <svg
+                      aria-hidden="true"
+                      width={wordCanvasWidth}
+                      height={wordCanvasHeight}
+                      style={{ position: "absolute", top: 0, left: 0, pointerEvents: "none" }}
                     >
-                      {letterData?.character ?? "?"}
-                    </span>
-                  );
-                })}
+                      {letterSequence.map((letter, i) => (
+                        <text
+                          key={`cap-${i}`}
+                          x={wordSlotLayout[i].x + wordSlotLayout[i].width / 2}
+                          y={11}
+                          textAnchor="middle"
+                          fontFamily="Fraunces, serif"
+                          fontStyle="italic"
+                          fontWeight={500}
+                          fontSize={11}
+                          fill="var(--sage-deep)"
+                        >
+                          {letter.romanization}
+                        </text>
+                      ))}
+                      {/* faint divider between adjacent slots within the same chunk -- no
+                          divider across a word-space gap, the extra gap already reads as one */}
+                      {wordSlotLayout.slice(1).map((slot, i) => {
+                        if (letterSequence[i].chunkIndex !== letterSequence[i + 1].chunkIndex) return null;
+                        const x = slot.x - WORD_LETTER_GAP / 2;
+                        return (
+                          <line key={`div-${i}`} x1={x} y1={WORD_CAPTION_HEIGHT + 4} x2={x} y2={wordCanvasHeight - 4} stroke="var(--line)" strokeWidth={1} />
+                        );
+                      })}
+                      {wordGuidePathsBySlot.flat().map((d, i) => (
+                        <path key={i} d={d} fill="none" stroke="var(--ink)" strokeOpacity={0.14} strokeWidth={4} strokeLinecap="round" strokeLinejoin="round" />
+                      ))}
+                      {/* fades out after holding the finished word briefly, handing off to
+                          the plain ghost above as the guide the user actually traces over */}
+                      <g
+                        key={`word-${currentWordIndex}-${demoReplayCount}`}
+                        style={{ animation: `demo-fade-out ${DEMO_FADE_MS}ms ease-in ${wordGuideFadeDelay}ms 1 forwards` }}
+                      >
+                        {wordGuideStrokesBySlot.map((strokes, slotIndex) =>
+                          strokes.map((stroke, strokeIndex) => {
+                            const d = wordGuidePathsBySlot[slotIndex][strokeIndex];
+                            const { delay, duration } = wordGuideTimingBySlot[slotIndex]?.[strokeIndex] ?? { delay: 0, duration: 400 };
+                            const start = stroke[0];
+                            return (
+                              <g key={`${slotIndex}-${strokeIndex}`}>
+                                <path
+                                  d={d}
+                                  fill="none"
+                                  stroke="var(--sage-deep)"
+                                  strokeWidth={4}
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  pathLength={1}
+                                  style={{
+                                    strokeDasharray: 1,
+                                    animation: `stroke-reveal ${duration}ms linear ${delay}ms 1 both`,
+                                  }}
+                                />
+                                {start && (
+                                  <circle
+                                    cx={start.x}
+                                    cy={start.y}
+                                    r={3.5}
+                                    fill="var(--sage-deep)"
+                                    style={{ animation: `dot-reveal 150ms linear ${delay}ms 1 both` }}
+                                  />
+                                )}
+                              </g>
+                            );
+                          })
+                        )}
+                      </g>
+                    </svg>
+                    <canvas
+                      ref={canvasRef}
+                      width={wordCanvasWidth}
+                      height={wordCanvasHeight}
+                      {...handlers}
+                      style={{ position: "relative", background: "transparent", touchAction: "none" }}
+                    />
+                  </div>
+                </div>
               </div>
-              <div style={{ display: "flex", justifyContent: "center", gap: "6px", marginTop: "8px" }}>
+
+              <div style={{ display: "flex", justifyContent: "center", gap: "8px" }}>
                 {letterSequence.map((_, i) => {
                   const letterResult = wordLetterResults[i];
+                  const passed = letterResult === true;
                   return (
                     <span
                       key={i}
                       style={{
-                        width: "8px",
-                        height: "8px",
+                        width: "16px",
+                        height: "16px",
                         borderRadius: "50%",
                         boxSizing: "border-box",
-                        background: letterResult === true ? "var(--sage-deep)" : letterResult === false ? "var(--ink-soft)" : "var(--line)",
-                        border: i === currentLetterIndex ? "1.5px solid var(--sage-deep)" : "none",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        fontSize: "10px",
+                        fontWeight: 700,
+                        lineHeight: 1,
+                        color: passed ? "var(--paper)" : letterResult === false ? "var(--paper)" : "transparent",
+                        background: passed ? "var(--sage-deep)" : letterResult === false ? "var(--ink-soft)" : "var(--line)",
                       }}
-                    />
+                    >
+                      {passed ? "✓" : letterResult === false ? "×" : ""}
+                    </span>
                   );
                 })}
               </div>
             </div>
           )}
 
-          <div className="label-eyebrow" style={{ textAlign: "center", marginBottom: "4px" }}>
-            {currentRomanization}
-          </div>
-
-          {/* glyph is the focal point -- no box/border, sits straight on the page, much
-              bigger than anything else */}
-          <div
-            className="font-glyph"
-            style={{ textAlign: "center", fontSize: "220px", lineHeight: 1, color: "var(--ink)", margin: "0 0 var(--space-tight)", userSelect: "none" }}
-          >
-            {currentCharacter}
-          </div>
-
-          <div style={{ display: "flex", justifyContent: "center", marginBottom: "var(--space-medium)" }}>
-            <div
-              style={{
-                width: CANVAS_SIZE,
-                height: CANVAS_SIZE,
-                border: "1.5px solid var(--ink)", // the one element that gets a real border -- it's the writing surface
-                background: "white",
-                position: "relative",
-              }}
-            >
-              {/* faded tracing guide behind the canvas, kindergarten-worksheet style --
-                  traced from the actual recorded reference strokes (not the font glyph)
-                  so tracing this guide closely is, by construction, what gets scored well.
-                  dotted path + arrowhead show the draw direction, numbered circle shows
-                  stroke order -- same idea as a kids' handwriting worksheet */}
-              <svg
-                aria-hidden="true"
-                width={CANVAS_SIZE - 3}
-                height={CANVAS_SIZE - 3}
-                style={{ position: "absolute", top: 0, left: 0, pointerEvents: "none" }}
+          {mode === "characters" && (
+            <>
+              <div
+                style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", marginBottom: "-6px" }}
               >
-                {guideStrokes.map((stroke, i) => {
-                  const start = stroke[0];
-                  return (
-                    <g key={i}>
-                      <polyline
-                        points={stroke.map((p) => `${p.x},${p.y}`).join(" ")}
-                        fill="none"
-                        stroke="var(--ink)"
-                        strokeOpacity={0.22}
-                        strokeWidth={4}
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeDasharray="1 9"
-                      />
-                      <polygon points={arrowheadPoints(stroke)} fill="var(--sage-deep)" fillOpacity={0.55} />
-                      <circle
-                        cx={start.x}
-                        cy={start.y}
-                        r={8}
-                        fill="var(--sage-tint)"
-                        fillOpacity={0.85}
-                        stroke="var(--sage-deep)"
-                        strokeOpacity={0.6}
-                      />
-                      <text
-                        x={start.x}
-                        y={start.y}
-                        textAnchor="middle"
-                        dominantBaseline="central"
-                        fontSize={10}
-                        fontFamily="Inter, sans-serif"
-                        fontWeight={600}
-                        fill="var(--sage-deep)"
-                        fillOpacity={0.85}
-                      >
-                        {i + 1}
-                      </text>
-                    </g>
-                  );
-                })}
-              </svg>
-              <canvas
-                ref={canvasRef}
-                width={CANVAS_SIZE - 3}
-                height={CANVAS_SIZE - 3}
-                {...handlers}
-                style={{ position: "relative", background: "transparent", touchAction: "none" }}
-              />
-            </div>
-          </div>
+                <div className="glyph-caption" style={{ fontSize: "16px" }}>
+                  {currentRomanization}
+                </div>
+                {/* replays the stroke-order demo without waiting for a character change --
+                    bumping demoReplayCount changes the <g> key below, forcing it to remount
+                    and restart its CSS animations from scratch */}
+                <button
+                  type="button"
+                  onClick={() => setDemoReplayCount((n) => n + 1)}
+                  title="Watch it drawn again"
+                  aria-label="Watch it drawn again"
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    width: "20px",
+                    height: "20px",
+                    padding: 0,
+                    border: "1px solid var(--line)",
+                    borderRadius: "50%",
+                    background: "transparent",
+                    color: "var(--sage-deep)",
+                    fontSize: "10px",
+                    cursor: "pointer",
+                  }}
+                >
+                  ▶
+                </button>
+              </div>
 
-          {result && (
+              {/* glyph is the focal point -- no box/border, sits straight on the page, much
+                  bigger than anything else */}
+              <div
+                className="font-glyph"
+                style={{ textAlign: "center", fontSize: "220px", lineHeight: 1, color: "var(--ink)", margin: "0 0 var(--space-tight)", userSelect: "none" }}
+              >
+                {currentCharacter}
+              </div>
+
+              <div style={{ display: "flex", justifyContent: "center", marginBottom: "var(--space-medium)" }}>
+                {/* corner-tick frame around the writing surface, like a bordered page rather
+                    than a plain input box -- see .page-frame in theme.css */}
+                <div className="page-frame">
+                  <span className="page-frame-tick-tr" />
+                  <span className="page-frame-tick-bl" />
+                  <div
+                    style={{
+                      width: CANVAS_SIZE,
+                      height: CANVAS_SIZE,
+                      border: "1.5px solid var(--ink)", // the one element that gets a real border -- it's the writing surface
+                      background: "white",
+                      position: "relative",
+                    }}
+                  >
+                    {/* tracing guide behind the canvas -- a faint always-on "ghost" of the full
+                        character, plus a colored version that draws itself in stroke-by-stroke
+                        on the real recorded pacing (see strokeGeometry.js), then stays fully
+                        drawn as the trace target. both are smoothed splines through the
+                        recorded points, not the raw jittery polyline, and both are traced from
+                        the actual recorded reference strokes (not a font glyph) so tracing
+                        this closely is, by construction, what gets scored well */}
+                    <svg
+                      aria-hidden="true"
+                      width={CANVAS_SIZE - 3}
+                      height={CANVAS_SIZE - 3}
+                      style={{ position: "absolute", top: 0, left: 0, pointerEvents: "none" }}
+                    >
+                      {guidePaths.map((d, i) => (
+                        <path key={i} d={d} fill="none" stroke="var(--ink)" strokeOpacity={0.14} strokeWidth={5} strokeLinecap="round" strokeLinejoin="round" />
+                      ))}
+                      {/* fades out after holding the finished character briefly, handing off
+                          to the plain ghost above as the guide the user actually traces over */}
+                      <g
+                        key={`${currentRomanization}-${demoReplayCount}`}
+                        style={{ animation: `demo-fade-out ${DEMO_FADE_MS}ms ease-in ${guideFadeDelay}ms 1 forwards` }}
+                      >
+                        {guidePaths.map((d, i) => {
+                          const { delay, duration } = guideTiming[i] ?? { delay: 0, duration: 400 };
+                          const start = guideStrokes[i]?.[0];
+                          return (
+                            <g key={i}>
+                              <path
+                                d={d}
+                                fill="none"
+                                stroke="var(--sage-deep)"
+                                strokeWidth={5}
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                pathLength={1}
+                                style={{
+                                  strokeDasharray: 1,
+                                  animation: `stroke-reveal ${duration}ms linear ${delay}ms 1 both`,
+                                }}
+                              />
+                              {start && (
+                                <circle
+                                  cx={start.x}
+                                  cy={start.y}
+                                  r={4}
+                                  fill="var(--sage-deep)"
+                                  style={{ animation: `dot-reveal 150ms linear ${delay}ms 1 both` }}
+                                />
+                              )}
+                            </g>
+                          );
+                        })}
+                      </g>
+                    </svg>
+                    <canvas
+                      ref={canvasRef}
+                      width={CANVAS_SIZE - 3}
+                      height={CANVAS_SIZE - 3}
+                      {...handlers}
+                      style={{ position: "relative", background: "transparent", touchAction: "none" }}
+                    />
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+
+          {mode === "characters" && result && (
             <div
               style={{
                 borderTop: "1px solid var(--ink)",
@@ -835,6 +1051,40 @@ export default function App() {
             </div>
           )}
 
+          {/* per-letter detail for whichever letters last came back failed -- only the
+              failed ones, so a mostly-right word doesn't bury the useful feedback */}
+          {mode === "words" && wordLetterResults.some((r) => r === false) && (
+            <div
+              style={{
+                borderTop: "1px solid var(--ink)",
+                paddingTop: "var(--space-medium)",
+                paddingBottom: "var(--space-tight)",
+                marginBottom: "var(--space-medium)",
+                textAlign: "left",
+                maxWidth: "480px",
+                margin: "0 auto var(--space-medium)",
+              }}
+            >
+              {letterSequence.map((letter, i) => {
+                if (wordLetterResults[i] !== false) return null;
+                const msgs = wordLetterMessages[i];
+                if (!msgs || msgs.length === 0) return null;
+                return (
+                  <div key={i} style={{ marginBottom: "10px" }}>
+                    <div className="glyph-caption" style={{ fontSize: "12px", marginBottom: "2px" }}>
+                      {letter.romanization}
+                    </div>
+                    {msgs.map((m, mi) => (
+                      <p key={mi} className="feedback-text" style={{ margin: "2px 0", fontSize: "14px" }}>
+                        {m}
+                      </p>
+                    ))}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
           {submitError && <p style={{ color: "var(--error)", fontSize: "14px", textAlign: "center" }}>{submitError}</p>}
 
           <div style={{ display: "flex", justifyContent: "center", gap: "10px", marginBottom: "var(--space-medium)" }}>
@@ -847,18 +1097,16 @@ export default function App() {
             <button className="btn btn-primary" onClick={handleCheck} disabled={submitting || strokes.length === 0}>
               {submitting ? "Checking…" : "Check"}
             </button>
-            {mode === "words" ? (
-              <button className="btn btn-secondary" onClick={handleNext} disabled={isLastLetter}>
-                Next letter
-              </button>
-            ) : (
+            {mode === "characters" && (
               <button className="btn btn-secondary" onClick={handleNext}>
                 Next character
               </button>
             )}
-            <button className="btn btn-secondary" onClick={toggleHistory}>
-              {historyOpen ? "Hide history" : "Show history"}
-            </button>
+            {mode === "characters" && (
+              <button className="btn btn-secondary" onClick={toggleHistory}>
+                {historyOpen ? "Hide history" : "Show history"}
+              </button>
+            )}
           </div>
 
           {wordComplete && (
@@ -886,7 +1134,7 @@ export default function App() {
             </div>
           )}
 
-          {historyOpen && (
+          {mode === "characters" && historyOpen && (
             <div style={{ textAlign: "left", borderTop: "1px solid var(--ink)", paddingTop: "var(--space-tight)" }}>
               <div className="label-eyebrow" style={{ marginBottom: "12px" }}>
                 History for {currentCharacter} ({currentRomanization})

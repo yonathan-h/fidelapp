@@ -25,26 +25,15 @@ function buildMessages(referenceData, attemptStrokes, singleRefResult, passed, a
   // gets unreliable once counts don't match
   if (attemptCount < refCount) {
     const diff = refCount - attemptCount;
-    const isAre = diff === 1 ? "is" : "are";
-    const wasWere = attemptCount === 1 ? "was" : "were";
-    messages.push(
-      `This character needs ${refCount} ${strokeWord(refCount)}, but only ` +
-        `${attemptCount} ${wasWere} drawn — ${diff} ${strokeWord(diff)} ${isAre} missing.`
-    );
+    messages.push(`Needs ${refCount} ${strokeWord(refCount)}, only ${attemptCount} drawn. ${diff} ${strokeWord(diff)} missing.`);
   } else if (attemptCount > refCount) {
     const diff = attemptCount - refCount;
-    messages.push(
-      `This character only needs ${refCount} ${strokeWord(refCount)}, but ` +
-        `${attemptCount} were drawn — ${diff} extra ${strokeWord(diff)}.`
-    );
+    messages.push(`Only needs ${refCount} ${strokeWord(refCount)}. ${diff} extra ${strokeWord(diff)} drawn.`);
   }
 
   // worth flagging even alongside a count mismatch if the shape is really off
   if (attemptCount !== refCount && singleRefResult.shapeScore < 35) {
-    messages.push(
-      "On top of the stroke count, the overall shape doesn't closely " +
-        "resemble this character — double check which character you're drawing."
-    );
+    messages.push("Overall shape doesn't closely resemble this character. Double check which character you're drawing.");
   }
 
   if (attemptCount === refCount) {
@@ -53,15 +42,9 @@ function buildMessages(referenceData, attemptStrokes, singleRefResult, passed, a
       .map((d) => d.strokeIndex + 1);
 
     if (reversedStrokes.length === 1) {
-      messages.push(
-        `Stroke ${reversedStrokes[0]} looks like it was drawn in the wrong ` +
-          `direction — check the start and end points.`
-      );
+      messages.push(`Stroke ${reversedStrokes[0]} looks drawn in the wrong direction. Check its start and end points.`);
     } else if (reversedStrokes.length > 1) {
-      messages.push(
-        `Strokes ${reversedStrokes.join(", ")} look like they were drawn ` +
-          `in the wrong direction — check the start and end points.`
-      );
+      messages.push(`Strokes ${reversedStrokes.join(", ")} look drawn in the wrong direction. Check their start and end points.`);
     }
 
     const weakStrokes = strokeDetail.perStrokeDeviations
@@ -69,15 +52,9 @@ function buildMessages(referenceData, attemptStrokes, singleRefResult, passed, a
       .map((d) => d.strokeIndex + 1);
 
     if (weakStrokes.length === 1) {
-      messages.push(
-        `Stroke ${weakStrokes[0]} doesn't closely match the reference path ` +
-          `— try slowing down on that stroke.`
-      );
+      messages.push(`Stroke ${weakStrokes[0]} doesn't closely match the reference. Try slowing down on it.`);
     } else if (weakStrokes.length > 1) {
-      messages.push(
-        `Strokes ${weakStrokes.join(", ")} don't closely match the ` +
-          `reference path — try slowing down on those strokes.`
-      );
+      messages.push(`Strokes ${weakStrokes.join(", ")} don't closely match the reference. Try slowing down on them.`);
     }
   }
 
@@ -87,8 +64,8 @@ function buildMessages(referenceData, attemptStrokes, singleRefResult, passed, a
       const worst = regionDeviations[0];
       messages.push(
         worst.issue === "missing"
-          ? `The ${worst.region} area doesn't have enough ink — that part of the character looks incomplete or shifted.`
-          : `The ${worst.region} area has extra strokes that aren't part of the reference shape.`
+          ? `Not enough ink in the ${worst.region}. Looks incomplete or shifted there.`
+          : `Extra ink in the ${worst.region} that isn't part of the reference.`
       );
     }
   }
@@ -99,9 +76,9 @@ function buildMessages(referenceData, attemptStrokes, singleRefResult, passed, a
     } else if (passed) {
       // shape is the priority signal for passing, so a pass earns this even
       // if stroke order is mediocre
-      messages.push("Good attempt overall — minor variation from the reference, nothing specific stands out as wrong.");
+      messages.push("Good attempt. Minor variation from the reference, nothing specific stands out.");
     } else {
-      messages.push("The overall match is a bit loose — try tracing more closely over the reference guide.");
+      messages.push("Match is a bit loose. Try tracing more closely over the guide.");
     }
   }
 

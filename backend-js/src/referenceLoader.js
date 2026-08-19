@@ -64,11 +64,19 @@ export function loadReferenceMulti(romanization) {
   return samples;
 }
 
-// recorded path stripped of timestamps, for the frontend to draw as the tracing guide --
-// using the real reference shape (not a font glyph) means what you trace is what gets scored
+// recorded path for the frontend to draw as the tracing guide -- sourced from the single
+// reference (reference_data/), which is a DTW-averaged consensus of the 5 recorded samples
+// (see backend-js/scripts/regenerate-reference-averages.js), not any one raw recording.
+// this is also what detailed feedback and strokeOrderScore compare against, so what you
+// trace is, by construction, what gets scored -- same principle as using real recorded
+// strokes instead of a font glyph, just applied one level further. timestamps are kept,
+// rebased to milliseconds relative to the first point of the first stroke, so the frontend
+// can replay the character being drawn at (a clamped version of) its original pace
 export function loadGuideStrokes(romanization) {
-  const samples = loadReferenceMulti(romanization);
-  if (!samples || samples.length === 0) return null;
+  const reference = loadReference(romanization);
+  if (!reference) return null;
 
-  return samples[0].strokes.map((stroke) => stroke.map((p) => ({ x: p.x, y: p.y })));
+  const strokes = reference.strokes;
+  const t0 = strokes[0]?.[0]?.t ?? 0;
+  return strokes.map((stroke) => stroke.map((p) => ({ x: p.x, y: p.y, t: (p.t - t0) * 1000 })));
 }

@@ -57,6 +57,60 @@ body {
   color: var(--ink);
 }
 
+/* small caption sitting directly above a glyph, furigana-style -- distinct from
+   label-eyebrow (which marks a section) because this one is meant to read as
+   attached to the character beneath it, not as standalone UI chrome */
+.glyph-caption {
+  font-family: "Fraunces", serif;
+  font-style: italic;
+  font-weight: 500;
+  color: var(--sage-deep);
+  letter-spacing: 0.01em;
+}
+
+/* corner-tick frame for the writing surface -- four short strokes instead of a
+   plain rectangle border, so the canvas reads as a bordered page rather than a
+   generic input box */
+.page-frame {
+  position: relative;
+  padding: 14px;
+  background: var(--paper-deep);
+}
+.page-frame::before,
+.page-frame::after,
+.page-frame > .page-frame-tick-tr,
+.page-frame > .page-frame-tick-bl {
+  content: "";
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--sage-deep);
+}
+.page-frame::before {
+  top: 0;
+  left: 0;
+  border-right: none;
+  border-bottom: none;
+}
+.page-frame::after {
+  bottom: 0;
+  right: 0;
+  border-left: none;
+  border-top: none;
+}
+.page-frame > .page-frame-tick-tr {
+  top: 0;
+  right: 0;
+  border-left: none;
+  border-bottom: none;
+}
+.page-frame > .page-frame-tick-bl {
+  bottom: 0;
+  left: 0;
+  border-right: none;
+  border-top: none;
+}
+
 .btn {
   font-family: "Inter", sans-serif;
   font-size: 15px;
@@ -106,4 +160,29 @@ body {
 .field-input:focus {
   outline: none;
   border-color: var(--sage);
+}
+
+/* stroke-order demo: reveals a path (pathLength=1, so dasharray/dashoffset are unitless)
+   from hidden to fully drawn -- per-stroke timing comes from animation-delay/-duration set
+   inline, so this one keyframe pair covers every stroke of every character */
+@keyframes stroke-reveal {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+@keyframes dot-reveal {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes demo-fade-out {
+  to {
+    opacity: 0;
+  }
 }
