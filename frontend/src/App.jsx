@@ -368,6 +368,28 @@ export default function App() {
     clear();
   }
 
+  // prioritizes filling gaps over revisiting weak spots -- a never-attempted character is
+  // a bigger practice opportunity than a low score on one you've already tried a few times
+  function goToWeakSpot() {
+    const unattempted = orderedCharacters.filter((c) => !progressByRomanization[c.romanization]);
+    if (unattempted.length > 0) {
+      goToCharacter(unattempted[Math.floor(Math.random() * unattempted.length)].index);
+      return;
+    }
+
+    if (orderedCharacters.length === 0) return;
+    let worst = orderedCharacters[0];
+    let worstScore = Infinity;
+    for (const c of orderedCharacters) {
+      const score = progressByRomanization[c.romanization]?.best_shape_score ?? Infinity;
+      if (score < worstScore) {
+        worstScore = score;
+        worst = c;
+      }
+    }
+    goToCharacter(worst.index);
+  }
+
   function goToWord(index) {
     setMode("words");
     setCurrentWordIndex(index);
@@ -600,6 +622,12 @@ export default function App() {
                 {progress.practiced_count} of {progress.total_characters} practiced
               </div>
             )}
+
+            <div style={{ padding: "0 8px", marginBottom: "var(--space-tight)" }}>
+              <button className="btn btn-secondary" onClick={goToWeakSpot} style={{ width: "100%", fontSize: "13px", padding: "8px 12px" }}>
+                Practice a weak spot
+              </button>
+            </div>
 
             {/* one row per consonant family, one column per vowel form, in real Fidel chart
                 order (see characterFamilies.js) -- the glyph itself sits in each cell, so
