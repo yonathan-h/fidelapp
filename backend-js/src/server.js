@@ -40,7 +40,12 @@ app.get("/health", async (req, res) => {
 });
 
 app.get("/auth/me", requireAuth, (req, res) => {
-  res.json({ id: req.user.id, username: req.user.username, email: req.user.email });
+  res.json({
+    id: req.user.id,
+    username: req.user.username,
+    email: req.user.email,
+    email_verified: req.user.emailVerified,
+  });
 });
 
 // catch-all so a bad query somewhere doesn't take down the whole process
@@ -49,7 +54,10 @@ process.on("unhandledRejection", (reason) => {
 });
 
 async function start() {
-  await sequelize.sync();
+  // alter:true so newly-added model columns (e.g. email_verified, verification_token)
+  // actually get created on an existing database instead of only on a fresh one --
+  // this app has no migration framework, sync() is the whole schema story
+  await sequelize.sync({ alter: true });
   app.listen(config.port, () => {
     console.log(`fidel backend listening on port ${config.port}`);
   });

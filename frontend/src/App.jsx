@@ -1,5 +1,18 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
-import { signup, login, getCharacters, getWords, submitAttempt, getProgress, getHistory, getMe } from "./api";
+import {
+  signup,
+  login,
+  getCharacters,
+  getWords,
+  submitAttempt,
+  getProgress,
+  getHistory,
+  getMe,
+  verifyEmail,
+  resendVerification,
+  forgotPassword,
+  resetPassword,
+} from "./api";
 import { useStrokeCanvas } from "./useStrokeCanvas";
 import { CHARACTER_FAMILIES } from "./characterFamilies";
 import {
@@ -72,7 +85,10 @@ function normalizeGuideStrokes(strokes, canvasSize, fillRatio = 0.85) {
 }
 
 
-export default function App() {
+// the actual practice app (auth + characters/words) -- routing to this vs. the
+// email-verification/password-reset screens happens in the default-exported App()
+// at the bottom of this file
+function PracticeApp() {
   const [token, setToken] = useState(null);
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
@@ -81,6 +97,7 @@ export default function App() {
   const [authError, setAuthError] = useState(null);
   const [account, setAccount] = useState(null);
   const [accountOpen, setAccountOpen] = useState(false);
+  const [resendStatus, setResendStatus] = useState("idle"); // "idle" | "sending" | "sent"
 
   const [characters, setCharacters] = useState([]);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -265,6 +282,7 @@ export default function App() {
     setHistoryOpen(false);
     setHistory([]);
     setAccountOpen(false);
+    setResendStatus("idle");
     setUsername("");
     setEmail("");
     setPassword("");
@@ -285,6 +303,18 @@ export default function App() {
       setToken(access_token);
     } catch (err) {
       setAuthError(err.message);
+    }
+  }
+
+  async function handleResendVerification() {
+    if (!account) return;
+    setResendStatus("sending");
+    try {
+      await resendVerification(account.email);
+      setResendStatus("sent");
+    } catch (err) {
+      console.error(err);
+      setResendStatus("idle");
     }
   }
 
@@ -497,6 +527,11 @@ export default function App() {
                 onChange={(e) => setPassword(e.target.value)}
                 required
               />
+              {authMode === "login" && (
+                <a href="/forgot-password" style={{ display: "block", marginTop: "6px", fontSize: "13px", color: "var(--ink-soft)" }}>
+                  Forgot password?
+                </a>
+              )}
             </div>
 
             {authError && <p style={{ color: "var(--error)", fontSize: "14px" }}>{authError}</p>}
@@ -609,6 +644,28 @@ export default function App() {
           >
             <p style={{ margin: "2px 0", fontWeight: 600 }}>@{account.username}</p>
             <p style={{ margin: "2px 0" }}>{account.email}</p>
+            {!account.email_verified && (
+              <div style={{ marginTop: "8px" }}>
+                <p style={{ margin: "0 0 4px", color: "var(--error)" }}>Email not verified.</p>
+                <button
+                  type="button"
+                  onClick={handleResendVerification}
+                  disabled={resendStatus === "sending"}
+                  style={{
+                    background: "none",
+                    border: "none",
+                    padding: 0,
+                    font: "inherit",
+                    fontSize: "13px",
+                    color: "var(--sage-deep)",
+                    textDecorationLine: "underline",
+                    cursor: resendStatus === "sending" ? "default" : "pointer",
+                  }}
+                >
+                  {resendStatus === "sending" ? "Sending…" : resendStatus === "sent" ? "Verification email sent" : "Resend verification email"}
+                </button>
+              </div>
+            )}
           </div>
         )}
 
@@ -1196,4 +1253,246 @@ export default function App() {
       </div>
     </div>
   );
+}
+
+// shared shell for the three standalone auth screens below -- same centered-card layout
+// as PracticeApp's own login screen, just without the form
+function AuthScreenShell({ children }) {
+  return (
+    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <div style={{ width: "380px", padding: "24px" }}>
+        <div
+          className="font-display"
+          style={{
+            textAlign: "center",
+            fontSize: "22px",
+            fontWeight: 500,
+            letterSpacing: "0.02em",
+            marginBottom: "40px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: "8px",
+          }}
+        >
+          <span className="font-glyph" style={{ color: "var(--sage-deep)" }}>
+            ፊ
+          </span>{" "}
+          Fidel
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+// lands here from the link in the verification email (/verify-email?token=...) --
+// fires the verify call once on mount and shows the result
+function VerifyEmailScreen() {
+  const [status, setStatus] = useState("verifying"); // "verifying" | "success" | "error"
+  const [errorMessage, setErrorMessage] = useState("");
+
+  useEffect(() => {
+    const token = new URLSearchParams(window.location.search).get("token");
+    if (!token) {
+      setStatus("error");
+      setErrorMessage("Missing verification token.");
+      return;
+    }
+    verifyEmail(token)
+      .then(() => setStatus("success"))
+      .catch((err) => {
+        setStatus("error");
+        setErrorMessage(err.message);
+      });
+  }, []);
+
+  return (
+    <AuthScreenShell>
+      <div style={{ textAlign: "center" }}>
+        {status === "verifying" && <p style={{ color: "var(--ink-soft)", fontSize: "14px" }}>Verifying your email…</p>}
+        {status === "success" && (
+          <>
+            <p className="font-display" style={{ fontSize: "20px", fontWeight: 500, color: "var(--sage-deep)", margin: "0 0 20px" }}>
+              ✓ Email verified
+            </p>
+            <a className="btn btn-primary" href="/" style={{ display: "inline-block", textDecoration: "none" }}>
+              Go to Fidel
+            </a>
+          </>
+        )}
+        {status === "error" && (
+          <>
+            <p style={{ color: "var(--error)", fontSize: "14px", margin: "0 0 20px" }}>{errorMessage}</p>
+            <a className="btn btn-secondary" href="/" style={{ display: "inline-block", textDecoration: "none" }}>
+              Back to Fidel
+            </a>
+          </>
+        )}
+      </div>
+    </AuthScreenShell>
+  );
+}
+
+// /forgot-password -- request a reset link. always shows the same confirmation message
+// regardless of whether the email matches an account, matching the backend's generic
+// response (avoids leaking which emails are registered)
+function ForgotPasswordScreen() {
+  const [email, setEmail] = useState("");
+  const [message, setMessage] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  async function handleSubmit(event) {
+    event.preventDefault();
+    setSubmitting(true);
+    try {
+      const data = await forgotPassword(email);
+      setMessage(data.message);
+    } catch (err) {
+      setMessage(err.message);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <AuthScreenShell>
+      <h1 className="font-display" style={{ fontWeight: 500, fontSize: "26px", textAlign: "center", margin: "0 0 8px", letterSpacing: "-0.01em" }}>
+        Reset your password
+      </h1>
+      <p style={{ textAlign: "center", color: "var(--ink-soft)", fontSize: "14px", margin: "0 0 32px" }}>We'll email you a link to reset it.</p>
+
+      {message ? (
+        <>
+          <p style={{ textAlign: "center", fontSize: "14px", margin: "0 0 24px" }}>{message}</p>
+          <a href="/" className="btn btn-secondary" style={{ display: "block", textAlign: "center", textDecoration: "none" }}>
+            Back to login
+          </a>
+        </>
+      ) : (
+        <form onSubmit={handleSubmit}>
+          <div style={{ marginBottom: "16px" }}>
+            <label className="label-eyebrow" style={{ display: "block", marginBottom: "6px" }}>
+              Email
+            </label>
+            <input
+              className="field-input"
+              type="email"
+              placeholder="you@example.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+            />
+          </div>
+          <button type="submit" className="btn btn-primary" disabled={submitting} style={{ width: "100%" }}>
+            {submitting ? "Sending…" : "Send reset link"}
+          </button>
+          <p style={{ textAlign: "center", marginTop: "20px", fontSize: "14px", color: "var(--ink-soft)" }}>
+            <a href="/" style={{ color: "var(--ink)" }}>
+              Back to login
+            </a>
+          </p>
+        </form>
+      )}
+    </AuthScreenShell>
+  );
+}
+
+// /reset-password?token=... -- lands here from the link in the reset email
+function ResetPasswordScreen() {
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [error, setError] = useState(null);
+  const [done, setDone] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const token = new URLSearchParams(window.location.search).get("token");
+
+  async function handleSubmit(event) {
+    event.preventDefault();
+    setError(null);
+    if (password !== confirm) {
+      setError("Passwords don't match.");
+      return;
+    }
+    if (!token) {
+      setError("Missing reset token.");
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await resetPassword(token, password);
+      setDone(true);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <AuthScreenShell>
+      {done ? (
+        <div style={{ textAlign: "center" }}>
+          <p className="font-display" style={{ fontSize: "20px", fontWeight: 500, color: "var(--sage-deep)", margin: "0 0 20px" }}>
+            ✓ Password reset
+          </p>
+          <a href="/" className="btn btn-primary" style={{ display: "inline-block", textDecoration: "none" }}>
+            Log in
+          </a>
+        </div>
+      ) : (
+        <>
+          <h1 className="font-display" style={{ fontWeight: 500, fontSize: "26px", textAlign: "center", margin: "0 0 32px", letterSpacing: "-0.01em" }}>
+            Choose a new password
+          </h1>
+          <form onSubmit={handleSubmit}>
+            <div style={{ marginBottom: "16px" }}>
+              <label className="label-eyebrow" style={{ display: "block", marginBottom: "6px" }}>
+                New password
+              </label>
+              <input
+                className="field-input"
+                type="password"
+                placeholder="••••••••"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                minLength={8}
+              />
+            </div>
+            <div style={{ marginBottom: "16px" }}>
+              <label className="label-eyebrow" style={{ display: "block", marginBottom: "6px" }}>
+                Confirm password
+              </label>
+              <input
+                className="field-input"
+                type="password"
+                placeholder="••••••••"
+                value={confirm}
+                onChange={(e) => setConfirm(e.target.value)}
+                required
+                minLength={8}
+              />
+            </div>
+            {error && <p style={{ color: "var(--error)", fontSize: "14px" }}>{error}</p>}
+            <button type="submit" className="btn btn-primary" disabled={submitting} style={{ width: "100%", marginTop: "8px" }}>
+              {submitting ? "Saving…" : "Reset password"}
+            </button>
+          </form>
+        </>
+      )}
+    </AuthScreenShell>
+  );
+}
+
+// path-based routing for the three standalone auth screens above -- hand-rolled instead
+// of pulling in react-router-dom, since this is the only routing the app needs. plain
+// <a> links (not client-side navigation) are used everywhere these screens are reached
+// from, so a full page load always re-evaluates this against the current path
+export default function App() {
+  const path = window.location.pathname;
+  if (path === "/verify-email") return <VerifyEmailScreen />;
+  if (path === "/forgot-password") return <ForgotPasswordScreen />;
+  if (path === "/reset-password") return <ResetPasswordScreen />;
+  return <PracticeApp />;
 }

@@ -82,5 +82,41 @@ export async function getMe(token) {
   const response = await fetch(`${API_BASE}/auth/me`, {
     headers: { Authorization: `Bearer ${token}` },
   });
-  return handleResponse(response); // {id, username, email}
+  return handleResponse(response); // {id, username, email, email_verified}
+}
+
+export async function verifyEmail(token) {
+  const response = await fetch(`${API_BASE}/auth/verify-email`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token }),
+  });
+  return handleResponse(response); // { verified: true }
+}
+
+export async function resendVerification(email) {
+  const response = await fetch(`${API_BASE}/auth/resend-verification`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email }),
+  });
+  return handleResponse(response); // { message }
+}
+
+export async function forgotPassword(email) {
+  const response = await fetch(`${API_BASE}/auth/forgot-password`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email }),
+  });
+  return handleResponse(response); // { message }
+}
+
+export async function resetPassword(token, password) {
+  const response = await fetch(`${API_BASE}/auth/reset-password`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token, password }),
+  });
+  return handleResponse(response); // { reset: true }
 }

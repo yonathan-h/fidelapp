@@ -4,6 +4,7 @@
 
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
+import { randomBytes } from "crypto";
 import { config } from "./config.js";
 
 const SALT_ROUNDS = 10;
@@ -34,4 +35,11 @@ export function decodeAccessToken(token) {
     // expired, malformed, bad signature -- all just mean "not authenticated"
     return null;
   }
+}
+
+// for email-verification and password-reset links -- 32 random bytes as hex, not a JWT,
+// since these need to be invalidated by clearing a DB column (a stateless JWT can't be
+// revoked before its own expiry)
+export function generateToken() {
+  return randomBytes(32).toString("hex");
 }
