@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Fidel Reference Recorder</title>
+<style>
+  :root {
+    --paper: #f2f1ee;
+    --ink: #1a1d1c;
+    --ink-soft: #5c6360;
+    --sage-deep: #5e7570;
+    --sage-tint: #e3e9e7;
+    --line: #d8d6d0;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, "Segoe UI", sans-serif;
+    background: var(--paper);
+    color: var(--ink);
+    display: flex;
+    height: 100vh;
+  }
+  #sidebar {
+    width: 280px;
+    flex-shrink: 0;
+    overflow-y: auto;
+    border-right: 2px solid var(--line);
+    padding: 16px;
+  }
+  #sidebar h1 { font-size: 15px; margin: 0 0 4px; }
+  #sidebar p.hint { font-size: 12px; color: var(--ink-soft); margin: 0 0 16px; }
+  .family-group { margin-bottom: 12px; }
+  .family-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-soft); margin: 8px 0 4px; }
+  .char-row {
+    display: flex; align-items: center; justify-content: space-between;
+    width: 100%; padding: 5px 8px; border: none; background: transparent;
+    cursor: pointer; font-size: 14px; border-radius: 3px; text-align: left;
+  }
+  .char-row:hover { background: var(--sage-tint); }
+  .char-row.active { background: var(--sage-deep); color: var(--paper); }
+  .char-row .glyph { font-size: 16px; margin-right: 8px; }
+  .char-row .count { font-size: 11px; opacity: 0.8; }
+  #main { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px; overflow-y: auto; }
+  #target-glyph { font-size: 140px; line-height: 1; margin-bottom: 4px; user-select: none; }
+  #target-label { font-size: 14px; color: var(--ink-soft); margin-bottom: 16px; }
+  #canvas-wrap { border: 2px solid var(--ink); background: white; margin-bottom: 16px; }
+  canvas { display: block; touch-action: none; }
+  .controls { display: flex; gap: 10px; margin-bottom: 12px; }
+  button.action {
+    font-size: 14px; padding: 10px 18px; border-radius: 999px; border: 1px solid var(--line);
+    background: transparent; cursor: pointer;
+  }
+  button.action.primary { background: var(--ink); color: var(--paper); border: none; }
+  button.action:disabled { opacity: 0.4; cursor: default; }
+  #status { font-size: 13px; color: var(--sage-deep); min-height: 18px; }
+  #progress-summary { font-size: 12px; color: var(--ink-soft); margin-top: 8px; }
+</style>
+</head>
+<body>
+<div id="sidebar">
+  <h1>Fidel Reference Recorder</h1>
+  <p class="hint">Local dev tool. Pick a character, draw it, save. Aim for 5 samples each for good DTW-averaging quality (see regenerate-reference-averages.js) -- 1 is enough to unblock a word if you're in a hurry.</p>
+  <div id="family-list"></div>
+  <div id="progress-summary"></div>
+</div>
+<div id="main">
+  <div id="target-glyph"></div>
+  <div id="target-label"></div>
+  <div id="canvas-wrap"><canvas id="canvas" width="400" height="400"></canvas></div>
+  <div class="controls">
+    <button class="action" id="undo-btn">Undo</button>
+    <button class="action" id="clear-btn">Clear</button>
+    <button class="action primary" id="save-btn">Save sample</button>
+  </div>
+  <div id="status"></div>
+</div>
+
+<script>
+// -- the 42 missing characters, grouped by family, in the app's established order
+// (1st, 2nd, 3rd, 4th, 5th, 6th, 7th traditional order) -- glyphs + codepoint order
+// verified against Wikipedia's Ge'ez script tables and cross-checked for zero overlap
+// with the existing 147-character set before this tool was built (see chat).
+const FAMILIES = [
+  { label: "K", members: [
+    ["ke", "ከ"], ["ku", "ኩ"], ["ki", "ኪ"], ["ka", "ካ"], ["kee", "ኬ"], ["k", "ክ"], ["ko", "ኮ"],
+  ]},
+  { label: "NY", members: [
+    ["nye", "ኘ"], ["nyu", "ኙ"], ["nyi", "ኚ"], ["nya", "ኛ"], ["nyee", "ኜ"], ["ny", "ኝ"], ["nyo", "ኞ"],
+  ]},
+  { label: "H2 (2nd h, pharyngeal)", members: [
+    ["he2", "ሐ"], ["hu2", "ሑ"], ["hi2", "ሒ"], ["ha2", "ሓ"], ["hee2", "ሔ"], ["h2", "ሕ"], ["ho2", "ሖ"],
+  ]},
+  { label: "S2 (2nd s)", members: [
+    ["se2", "ሠ"], ["su2", "ሡ"], ["si2", "ሢ"], ["sa2", "ሣ"], ["see2", "ሤ"], ["s2", "ሥ"], ["so2", "ሦ"],
+  ]},
+  { label: "A2 (ayin, 2nd glottal)", members: [
+    ["a2", "ዐ"], ["u2", "ዑ"], ["i2", "ዒ"], ["aa2", "ዓ"], ["e2", "ዔ"], ["ie2", "ዕ"], ["o2", "ዖ"],
+  ]},
+  { label: "TS2 (2nd tse)", members: [
+    ["tse2", "ጸ"], ["tsu2", "ጹ"], ["tsi2", "ጺ"], ["tsa2", "ጻ"], ["tsee2", "ጼ"], ["ts2", "ጽ"], ["tso2", "ጾ"],
+  ]},
+];
+
+let current = { romanization: FAMILIES[0].members[0][0], character: FAMILIES[0].members[0][1] };
+let strokes = [];
+let currentStroke = [];
+
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
+
+function drawSegment(from, to) {
+  ctx.beginPath();
+  ctx.moveTo(from.x, from.y);
+  ctx.lineTo(to.x, to.y);
+  ctx.lineWidth = 4;
+  ctx.lineCap = "round";
+  ctx.strokeStyle = "black";
+  ctx.stroke();
+}
+
+function redraw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  for (const stroke of strokes) {
+    for (let i = 1; i < stroke.length; i++) drawSegment(stroke[i - 1], stroke[i]);
+  }
+}
+
+function relPoint(e) {
+  const rect = canvas.getBoundingClientRect();
+  return { x: e.clientX - rect.left, y: e.clientY - rect.top, t: Date.now() / 1000 };
+}
+
+canvas.addEventListener("pointerdown", (e) => {
+  e.preventDefault();
+  try { canvas.setPointerCapture(e.pointerId); } catch {}
+  currentStroke = [relPoint(e)];
+});
+canvas.addEventListener("pointermove", (e) => {
+  if (currentStroke.length === 0) return;
+  e.preventDefault();
+  const p = relPoint(e);
+  const prev = currentStroke[currentStroke.length - 1];
+  currentStroke.push(p);
+  drawSegment(prev, p);
+});
+function endStroke() {
+  if (currentStroke.length > 1) strokes.push(currentStroke);
+  currentStroke = [];
+  updateButtons();
+}
+canvas.addEventListener("pointerup", endStroke);
+canvas.addEventListener("pointerleave", endStroke);
+canvas.addEventListener("pointercancel", endStroke);
+
+document.getElementById("undo-btn").addEventListener("click", () => {
+  strokes.pop();
+  redraw();
+  updateButtons();
+});
+document.getElementById("clear-btn").addEventListener("click", () => {
+  strokes = [];
+  redraw();
+  updateButtons();
+});
+document.getElementById("save-btn").addEventListener("click", async () => {
+  if (strokes.length === 0) return;
+  const status = document.getElementById("status");
+  status.textContent = "Saving…";
+  try {
+    const res = await fetch("/api/save-sample", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ romanization: current.romanization, character: current.character, strokes }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || "Save failed");
+    status.textContent = `Saved sample ${data.sampleNumber} for "${current.romanization}".`;
+    strokes = [];
+    redraw();
+    updateButtons();
+    await refreshCount(current.romanization);
+    renderFamilyList();
+  } catch (err) {
+    status.textContent = "Error: " + err.message;
+  }
+});
+
+function updateButtons() {
+  document.getElementById("undo-btn").disabled = strokes.length === 0;
+  document.getElementById("save-btn").disabled = strokes.length === 0;
+}
+
+const counts = {};
+async function refreshCount(romanization) {
+  const res = await fetch(`/api/sample-count?romanization=${encodeURIComponent(romanization)}`);
+  const data = await res.json();
+  counts[romanization] = data.count;
+}
+
+function selectCharacter(romanization, character) {
+  current = { romanization, character };
+  strokes = [];
+  redraw();
+  updateButtons();
+  document.getElementById("target-glyph").textContent = character;
+  document.getElementById("target-label").textContent =
+    romanization + (counts[romanization] != null ? ` — ${counts[romanization]} sample(s) recorded` : "");
+  document.getElementById("status").textContent = "";
+  renderFamilyList();
+}
+
+function renderFamilyList() {
+  const container = document.getElementById("family-list");
+  container.innerHTML = "";
+  for (const family of FAMILIES) {
+    const group = document.createElement("div");
+    group.className = "family-group";
+    const label = document.createElement("div");
+    label.className = "family-label";
+    label.textContent = family.label;
+    group.appendChild(label);
+    for (const [romanization, character] of family.members) {
+      const row = document.createElement("button");
+      row.className = "char-row" + (romanization === current.romanization ? " active" : "");
+      const count = counts[romanization];
+      row.innerHTML = `<span><span class="glyph">${character}</span>${romanization}</span><span class="count">${count == null ? "…" : count}</span>`;
+      row.addEventListener("click", () => selectCharacter(romanization, character));
+      group.appendChild(row);
+    }
+    container.appendChild(group);
+  }
+
+  const total = FAMILIES.reduce((sum, f) => sum + f.members.length, 0);
+  const withAny = Object.values(counts).filter((c) => c > 0).length;
+  const with5 = Object.values(counts).filter((c) => c >= 5).length;
+  document.getElementById("progress-summary").textContent =
+    `${withAny} of ${total} characters have at least 1 sample, ${with5} have 5+.`;
+}
+
+async function init() {
+  for (const family of FAMILIES) {
+    for (const [romanization] of family.members) {
+      await refreshCount(romanization);
+    }
+  }
+  selectCharacter(current.romanization, current.character);
+}
+init();
+</script>
+</body>
+</html>
