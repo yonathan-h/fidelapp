@@ -5,10 +5,10 @@
 //
 // "chunks" is an array of sub-words (more than one only for space-separated phrases,
 // e.g. "how are you"), each an ordered list of single-character romanizations. words
-// were checked against reference_data by hand -- a handful of otherwise-common words
-// (e.g. "nine", most weekdays) were left out because they need letters this app's
-// 147-character set doesn't cover yet (a "k" family, a palatalized "ny" family, and a
-// few historical duplicate letters).
+// were checked against reference_data by hand. as of the 42-character addition (k, ny,
+// and 4 historical duplicate letters -- see characterFamilies.js), most common words
+// that were previously blocked on missing letters can now be added; a few obscure
+// historical-duplicate-heavy words may still be missing.
 export const WORDS = [
   { text: "አንድ", romanization: "and", meaning: "one", category: "Numbers", chunks: [["a", "n", "d"]] },
   { text: "ሁለት", romanization: "hulet", meaning: "two", category: "Numbers", chunks: [["hu", "le", "t"]] },

@@ -632,7 +632,7 @@ export default function App() {
             {/* one row per consonant family, one column per vowel form, in real Fidel chart
                 order (see characterFamilies.js) -- the glyph itself sits in each cell, so
                 this doubles as both the navigation list and the progress heatmap instead of
-                having two separate views of the same 147 characters. cell color is gray
+                having two separate views of the same character set. cell color is gray
                 (not attempted) or sage-tinted by best shape score; text color is picked
                 from that background's actual luminance so the glyph stays legible either way */}
             <div style={{ display: "flex", flexDirection: "column", gap: "3px", padding: "0 8px" }}>
