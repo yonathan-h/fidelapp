@@ -697,14 +697,15 @@ export default function App() {
                             alignItems: "flex-start",
                             textAlign: "left",
                             padding: "7px 8px",
+                            borderRadius: "3px",
                             fontFamily: "Inter, sans-serif",
                             fontSize: "14px",
                             fontWeight: isCurrent ? 600 : 400,
-                            textDecorationLine: isCurrent ? "underline" : "none",
-                            textDecorationColor: "var(--sage-deep)",
-                            textDecorationThickness: "2px",
-                            textUnderlineOffset: "4px",
-                            background: "transparent",
+                            // active state is a filled background (--sage-tint, already
+                            // defined in theme.css for exactly this) instead of an
+                            // underline -- matches the character grid's cell-based active
+                            // state rather than the old text-decoration approach
+                            background: isCurrent ? "var(--sage-tint)" : "transparent",
                             border: "none",
                             cursor: "pointer",
                             color: "var(--ink)",
