@@ -3,6 +3,9 @@
 <head>
 <meta charset="UTF-8" />
 <title>Fidel Reference Recorder</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+Ethiopic:wght@500&display=swap" rel="stylesheet" />
 <style>
   :root {
     --paper: #f2f1ee;
@@ -42,10 +45,12 @@
   .char-row .glyph { font-size: 16px; margin-right: 8px; }
   .char-row .count { font-size: 11px; opacity: 0.8; }
   #main { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px; overflow-y: auto; }
+  .font-glyph { font-family: "Noto Serif Ethiopic", serif; }
   #target-glyph { font-size: 140px; line-height: 1; margin-bottom: 4px; user-select: none; }
   #target-label { font-size: 14px; color: var(--ink-soft); margin-bottom: 16px; }
-  #canvas-wrap { border: 2px solid var(--ink); background: white; margin-bottom: 16px; }
-  canvas { display: block; touch-action: none; }
+  #canvas-wrap { position: relative; border: 2px solid var(--ink); background: white; margin-bottom: 16px; width: 400px; height: 400px; }
+  #canvas-wrap canvas { position: absolute; top: 0; left: 0; display: block; touch-action: none; }
+  #guide-canvas { pointer-events: none; }
   .controls { display: flex; gap: 10px; margin-bottom: 12px; }
   button.action {
     font-size: 14px; padding: 10px 18px; border-radius: 999px; border: 1px solid var(--line);
@@ -65,9 +70,12 @@
   <div id="progress-summary"></div>
 </div>
 <div id="main">
-  <div id="target-glyph"></div>
+  <div id="target-glyph" class="font-glyph"></div>
   <div id="target-label"></div>
-  <div id="canvas-wrap"><canvas id="canvas" width="400" height="400"></canvas></div>
+  <div id="canvas-wrap">
+    <canvas id="guide-canvas" width="400" height="400"></canvas>
+    <canvas id="canvas" width="400" height="400"></canvas>
+  </div>
   <div class="controls">
     <button class="action" id="undo-btn">Undo</button>
     <button class="action" id="clear-btn">Clear</button>
@@ -108,6 +116,59 @@ let currentStroke = [];
 
 const canvas = document.getElementById("canvas");
 const ctx = canvas.getContext("2d");
+const guideCanvas = document.getElementById("guide-canvas");
+const guideCtx = guideCanvas.getContext("2d");
+const GUIDE_FONT = "Noto Serif Ethiopic";
+const GUIDE_FILL_RATIO = 0.85; // matches the practice app's own single-character canvas guide
+
+// measures the glyph's *actual* ink bounding box at a given font size -- not the font's
+// abstract em-box, which is what caused the original app's font-vs-recorded-strokes
+// proportion mismatch (see Bug 2 in memory: fixed there by switching the live guide from
+// a font glyph to real recorded strokes). here we have no recorded strokes yet for these
+// brand-new characters, so a font glyph is the only reference available -- but centering
+// and scaling it to its own measured bounding box (same principle as
+// centerAndScaleToOwnBBox/normalizeGuideStrokes elsewhere in this app) keeps every new
+// recording's scale/position consistent with how the rest of the app already works,
+// instead of trusting the font's own internal spacing
+function measureGlyphBBox(context, character, fontSize) {
+  context.font = `500 ${fontSize}px "${GUIDE_FONT}", serif`;
+  context.textAlign = "center";
+  context.textBaseline = "middle";
+  const m = context.measureText(character);
+  return {
+    left: m.actualBoundingBoxLeft,
+    right: m.actualBoundingBoxRight,
+    ascent: m.actualBoundingBoxAscent,
+    descent: m.actualBoundingBoxDescent,
+    width: m.actualBoundingBoxLeft + m.actualBoundingBoxRight,
+    height: m.actualBoundingBoxAscent + m.actualBoundingBoxDescent,
+  };
+}
+
+function drawGuide(character) {
+  guideCtx.clearRect(0, 0, guideCanvas.width, guideCanvas.height);
+  if (!character) return;
+
+  const probeFontSize = 300;
+  const probe = measureGlyphBBox(guideCtx, character, probeFontSize);
+  const longerDim = Math.max(probe.width, probe.height) || 1;
+  const fontSize = probeFontSize * ((guideCanvas.width * GUIDE_FILL_RATIO) / longerDim);
+
+  const final = measureGlyphBBox(guideCtx, character, fontSize);
+  const cx = guideCanvas.width / 2;
+  const cy = guideCanvas.height / 2;
+  // textAlign/textBaseline center+middle draws around (x,y) using the glyph's own
+  // bounding box, which usually isn't symmetric around that point -- offset the draw
+  // point by the bbox's own asymmetry so the glyph's true ink center lands on (cx, cy)
+  const drawX = cx + (final.left - final.right) / 2;
+  const drawY = cy + (final.ascent - final.descent) / 2;
+
+  guideCtx.font = `500 ${fontSize}px "${GUIDE_FONT}", serif`;
+  guideCtx.textAlign = "center";
+  guideCtx.textBaseline = "middle";
+  guideCtx.fillStyle = "rgba(26, 29, 28, 0.16)";
+  guideCtx.fillText(character, drawX, drawY);
+}
 
 function drawSegment(from, to) {
   ctx.beginPath();
@@ -202,6 +263,7 @@ function selectCharacter(romanization, character) {
   current = { romanization, character };
   strokes = [];
   redraw();
+  drawGuide(character);
   updateButtons();
   document.getElementById("target-glyph").textContent = character;
   document.getElementById("target-label").textContent =
@@ -224,7 +286,7 @@ function renderFamilyList() {
       const row = document.createElement("button");
       row.className = "char-row" + (romanization === current.romanization ? " active" : "");
       const count = counts[romanization];
-      row.innerHTML = `<span><span class="glyph">${character}</span>${romanization}</span><span class="count">${count == null ? "…" : count}</span>`;
+      row.innerHTML = `<span><span class="glyph font-glyph">${character}</span>${romanization}</span><span class="count">${count == null ? "…" : count}</span>`;
       row.addEventListener("click", () => selectCharacter(romanization, character));
       group.appendChild(row);
     }
@@ -239,6 +301,17 @@ function renderFamilyList() {
 }
 
 async function init() {
+  // wait for the actual web font, not just a fallback -- canvas text measurement uses
+  // whatever font is loaded *at measure time*, so drawing before this resolves would
+  // silently measure/scale against a system fallback instead of Noto Serif Ethiopic
+  try {
+    await document.fonts.load(`500 300px "${GUIDE_FONT}"`);
+    await document.fonts.ready;
+  } catch {
+    // font API unsupported or load failed -- guide will still draw, just possibly
+    // against a fallback font's metrics
+  }
+
   for (const family of FAMILIES) {
     for (const [romanization] of family.members) {
       await refreshCount(romanization);
