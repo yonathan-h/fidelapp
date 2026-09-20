@@ -12,6 +12,8 @@ import {
   resendVerification,
   forgotPassword,
   resetPassword,
+  getCharacterAudioUrl,
+  getWordAudioUrl,
 } from "./api";
 import { useStrokeCanvas } from "./useStrokeCanvas";
 import { CHARACTER_FAMILIES } from "./characterFamilies";
@@ -261,6 +263,12 @@ function PracticeApp() {
   // combined with currentRomanization/currentWordIndex in the key below so switching
   // characters or words also auto-plays
   const [demoReplayCount, setDemoReplayCount] = useState(0);
+
+  // fire-and-forget playback -- a missing/failed clip shouldn't surface an error to the
+  // user, pronunciation audio is a nice-to-have alongside the shape/stroke-order scoring
+  const playAudio = useCallback((url) => {
+    new Audio(url).play().catch(() => {});
+  }, []);
 
   const progressByRomanization = {};
   if (progress) {
@@ -821,6 +829,28 @@ function PracticeApp() {
                 >
                   ▶
                 </button>
+                <button
+                  type="button"
+                  onClick={() => playAudio(getWordAudioUrl(currentWordData.romanization))}
+                  title="Hear it pronounced"
+                  aria-label="Hear it pronounced"
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    width: "20px",
+                    height: "20px",
+                    padding: 0,
+                    border: "1px solid var(--line)",
+                    borderRadius: "50%",
+                    background: "transparent",
+                    color: "var(--sage-deep)",
+                    fontSize: "10px",
+                    cursor: "pointer",
+                  }}
+                >
+                  🔊
+                </button>
               </div>
 
               {/* example script, same role as the single big glyph in character mode --
@@ -1005,6 +1035,28 @@ function PracticeApp() {
                   }}
                 >
                   ▶
+                </button>
+                <button
+                  type="button"
+                  onClick={() => playAudio(getCharacterAudioUrl(currentRomanization))}
+                  title="Hear it pronounced"
+                  aria-label="Hear it pronounced"
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    width: "20px",
+                    height: "20px",
+                    padding: 0,
+                    border: "1px solid var(--line)",
+                    borderRadius: "50%",
+                    background: "transparent",
+                    color: "var(--sage-deep)",
+                    fontSize: "10px",
+                    cursor: "pointer",
+                  }}
+                >
+                  🔊
                 </button>
               </div>
 

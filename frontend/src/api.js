@@ -112,6 +112,17 @@ export async function forgotPassword(email) {
   return handleResponse(response); // { message }
 }
 
+// pre-generated TTS clips, served as static files -- no fetch needed, just point an
+// <audio>/Audio() at the url. encodeURIComponent matters here: a couple of word
+// romanizations are space-separated phrases (e.g. "endemin aleh")
+export function getCharacterAudioUrl(romanization) {
+  return `${API_BASE}/audio/characters/${encodeURIComponent(romanization)}.mp3`;
+}
+
+export function getWordAudioUrl(romanization) {
+  return `${API_BASE}/audio/words/${encodeURIComponent(romanization)}.mp3`;
+}
+
 export async function resetPassword(token, password) {
   const response = await fetch(`${API_BASE}/auth/reset-password`, {
     method: "POST",

@@ -1,10 +1,14 @@
 import express from "express";
 import cors from "cors";
+import { fileURLToPath } from "url";
+import { dirname, join } from "path";
 import { sequelize } from "./database.js";
 import { config } from "./config.js";
 import { authRouter } from "./routes/auth.js";
 import { practiceRouter } from "./routes/practice.js";
 import { requireAuth } from "./middleware/requireAuth.js";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 // need these imported before sync() so sequelize knows about them
 import "./models/User.js";
@@ -26,6 +30,9 @@ app.use(
     credentials: true,
   })
 );
+
+// pre-generated TTS clips (see scripts/generate-audio.js) -- static files, no route logic
+app.use("/audio", express.static(join(__dirname, "audio")));
 
 app.use("/auth", authRouter);
 app.use("/practice", practiceRouter);

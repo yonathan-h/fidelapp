@@ -14,11 +14,14 @@ Scoring compares your strokes against five recorded samples of the correct chara
 
 Word/phrase practice uses one wide canvas holding every letter of the word, each with its own guide, chained into one continuous demo animation; checking splits your strokes back out per letter for scoring.
 
+Every character and word has a pronunciation clip (a speaker button next to the tracing demo) generated with Azure Neural TTS, since Fidel is a syllabary and shape alone doesn't teach you how something is said.
+
 ## Stack
 
 - React frontend, deployed on Vercel
 - Node and Express backend, deployed on Render with a managed Postgres database
 - JWT based authentication with hashed passwords, email verification, and password reset (via Resend)
+- Pronunciation audio generated with Azure Neural TTS, served as static files
 
 The scoring engine uses dynamic time warping to compare stroke paths and an intersection over union method to compare shapes. Both were built from scratch in JavaScript.
 
@@ -75,10 +78,12 @@ backend-js/
     email.js         Resend wrapper for verification/reset emails
     reference_data/        DTW-averaged consensus reference, one file per character
     reference_data_multi/  five raw recorded samples per character
+    audio/                 generated pronunciation clips, one mp3 per character and word
   scripts/
     regenerate-reference-averages.js   builds reference_data/ from the raw samples
     validate-averaged-references.js    scores the result against real data, catches regressions
     recorder-server.js + recorder-tool.html   local tool for recording new characters
+    generate-audio.js                  generates audio/ via Azure Neural TTS
 
 frontend/
   src/
