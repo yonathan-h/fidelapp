@@ -1,7 +1,6 @@
 // turns scoring.js's raw numbers into human-readable messages, and decides pass/fail
 
-import { scoreAttempt, scoreAttemptMulti, shapeRegionDeviations } from "./scoring.js";
-import { loadReferenceMulti } from "./referenceLoader.js";
+import { scoreAttempt, shapeRegionDeviations } from "./scoring.js";
 
 const PASS_THRESHOLD = 70; // shape score cutoff for the demo's pass/fail
 
@@ -9,11 +8,10 @@ function strokeWord(n) {
   return n === 1 ? "stroke" : "strokes";
 }
 
-// itemized stroke/count/direction/region detail comes from comparing against the single
-// recorded reference (need one concrete stroke sequence to diff against), but the final
-// summary line uses the authoritative multi-sample passed/shapeScore so it never contradicts
-// the pass/fail banner shown alongside it
-function buildMessages(referenceData, attemptStrokes, singleRefResult, passed, authoritativeShapeScore) {
+// itemized stroke/count/direction/region detail and the pass/fail decision both come from
+// the same single-reference comparison (scoreAttempt), so they can't contradict each other
+// by construction -- no separate score to keep in sync
+function buildMessages(referenceData, attemptStrokes, singleRefResult, passed) {
   const strokeDetail = singleRefResult.strokeOrderDetail;
   const referenceStrokes = referenceData.strokes;
 
@@ -71,7 +69,7 @@ function buildMessages(referenceData, attemptStrokes, singleRefResult, passed, a
   }
 
   if (messages.length === 0) {
-    if (passed && singleRefResult.strokeOrderScore >= 90 && authoritativeShapeScore >= 90) {
+    if (passed && singleRefResult.strokeOrderScore >= 90 && singleRefResult.shapeScore >= 90) {
       messages.push("Strong match on both shape and stroke order.");
     } else if (passed) {
       // shape is the priority signal for passing, so a pass earns this even
@@ -87,29 +85,15 @@ function buildMessages(referenceData, attemptStrokes, singleRefResult, passed, a
 
 export function generatePassFailResult(referenceData, attemptStrokes) {
   const singleRefResult = scoreAttempt(referenceData, attemptStrokes);
-
-  // multi-sample (best-3-of-5) is the real pass/fail signal when available,
-  // falls back to the single-sample score otherwise
-  const multiSamples = loadReferenceMulti(referenceData.romanization);
-  let shapeScoreForPassing = singleRefResult.shapeScore;
-  let perSampleScores = null;
-
-  if (multiSamples && multiSamples.length > 0) {
-    const multiResult = scoreAttemptMulti(multiSamples, attemptStrokes);
-    shapeScoreForPassing = multiResult.shapeScore;
-    perSampleScores = multiResult.perSampleScores;
-  }
-
-  const passed = shapeScoreForPassing >= PASS_THRESHOLD;
-  const messages = buildMessages(referenceData, attemptStrokes, singleRefResult, passed, shapeScoreForPassing);
+  const passed = singleRefResult.shapeScore >= PASS_THRESHOLD;
+  const messages = buildMessages(referenceData, attemptStrokes, singleRefResult, passed);
 
   return {
     passed,
     message: passed ? "Well done!" : "Try again.",
     messages,
     // these never go to the client, just persisted for progress/history
-    _internalShapeScore: shapeScoreForPassing,
+    _internalShapeScore: singleRefResult.shapeScore,
     _internalStrokeOrderScore: singleRefResult.strokeOrderScore,
-    _internalPerSampleScores: perSampleScores,
   };
 }

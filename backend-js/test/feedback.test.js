@@ -20,15 +20,12 @@ function reversed(points) {
 
 const L_SHAPE = [line(0, 0, 0, 100), line(0, 100, 100, 100)];
 
-// no reference_data_multi/ directory for this romanization, so generatePassFailResult
-// falls back to the single-reference score -- exercises that code path deliberately
 const FAKE_REFERENCE = { character: "X", romanization: "zzz_test_fake_char", strokes: L_SHAPE };
 
-describe("generatePassFailResult -- single-reference fallback (no multi-sample data)", () => {
+describe("generatePassFailResult", () => {
   test("an exact match passes with a strong-match message", () => {
     const result = generatePassFailResult(FAKE_REFERENCE, L_SHAPE);
     assert.equal(result.passed, true);
-    assert.equal(result._internalPerSampleScores, null);
     assert.ok(result.messages.some((m) => /strong match/i.test(m)));
   });
 
@@ -59,11 +56,10 @@ describe("generatePassFailResult -- single-reference fallback (no multi-sample d
   });
 });
 
-describe("generatePassFailResult -- real character with recorded multi-sample data", () => {
-  test("tracing the actual reference exactly passes using the best-3-of-5 multi-sample score", () => {
+describe("generatePassFailResult -- sanity check against real recorded data", () => {
+  test("tracing a real character's actual reference exactly passes", () => {
     const reference = loadReference("ha");
     const result = generatePassFailResult(reference, reference.strokes);
     assert.equal(result.passed, true);
-    assert.equal(result._internalPerSampleScores.length, 5);
   });
 });

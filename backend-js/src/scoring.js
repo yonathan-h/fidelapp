@@ -286,7 +286,7 @@ export function strokeOrderScore(referenceStrokes, attemptStrokes) {
   return result;
 }
 
-// single-reference entry point
+// combines both scores against the recorded reference -- feedback.js's entry point
 export function scoreAttempt(referenceData, attemptStrokes) {
   const referenceStrokes = referenceData.strokes;
 
@@ -299,28 +299,5 @@ export function scoreAttempt(referenceData, attemptStrokes) {
     shapeScore: Math.round(shape * 10) / 10,
     strokeOrderScore: strokeOrder.score,
     strokeOrderDetail: strokeOrder,
-  };
-}
-
-// multi-sample verification: compares the attempt against all 5 recorded samples
-// of the character, averages the best 3. best-3-of-5 (not avg of all 5, not just
-// the single best) tolerates one weak/outlier reference sample without letting
-// either extreme dominate -- the attempt has to genuinely resemble most of the
-// known-good examples, not just one
-export function scoreAttemptMulti(samples, attemptStrokes) {
-  if (!samples || samples.length === 0) {
-    return { shapeScore: 0.0, perSampleScores: [] };
-  }
-
-  const perSampleScores = samples.map((sample) => shapeScore(sample.strokes, attemptStrokes));
-
-  const sorted = [...perSampleScores].sort((a, b) => b - a);
-  const topCount = Math.min(3, sorted.length);
-  const top = sorted.slice(0, topCount);
-  const avgOfTop = top.reduce((a, b) => a + b, 0) / top.length;
-
-  return {
-    shapeScore: Math.round(avgOfTop * 10) / 10,
-    perSampleScores: perSampleScores.map((s) => Math.round(s * 10) / 10),
   };
 }

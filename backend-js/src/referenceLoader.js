@@ -1,5 +1,8 @@
-// loads recorded reference stroke data for each fidel character
-// single-sample (reference_data/) and multi-sample (reference_data_multi/, 5 per char) variants
+// loads the recorded (DTW-averaged consensus) reference stroke data for each fidel
+// character -- the single source of truth for the guide, feedback, and pass/fail.
+// reference_data_multi/ (the raw per-sample recordings this consensus is built from)
+// is offline-only data now: scripts/regenerate-reference-averages.js and
+// scripts/validate-single-reference-scoring.js read it directly, not through this module.
 
 import { readFileSync, existsSync, readdirSync } from "fs";
 import { fileURLToPath } from "url";
@@ -7,10 +10,8 @@ import { dirname, join } from "path";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REFERENCE_DATA_DIR = join(__dirname, "reference_data");
-const MULTI_REFERENCE_DATA_DIR = join(__dirname, "reference_data_multi");
 
 const cache = new Map();
-const multiCache = new Map();
 
 function assertSafeId(romanization) {
   if (romanization.includes("/") || romanization.includes("\\") || romanization.includes("..")) {
@@ -44,24 +45,6 @@ export function listAvailableCharactersWithGlyphs() {
     const data = loadReference(romanization);
     return { romanization, character: data.character };
   });
-}
-
-// returns all 5 recorded samples for a character, used by the multi-sample
-// verification in scoring.js instead of comparing against just one reference
-export function loadReferenceMulti(romanization) {
-  if (multiCache.has(romanization)) return multiCache.get(romanization);
-
-  assertSafeId(romanization);
-  const charDir = join(MULTI_REFERENCE_DATA_DIR, romanization);
-  if (!existsSync(charDir)) return null;
-
-  const sampleFiles = readdirSync(charDir)
-    .filter((f) => f.startsWith("sample_") && f.endsWith(".json"))
-    .sort();
-
-  const samples = sampleFiles.map((f) => JSON.parse(readFileSync(join(charDir, f), "utf-8")));
-  multiCache.set(romanization, samples);
-  return samples;
 }
 
 // recorded path for the frontend to draw as the tracing guide -- sourced from the single

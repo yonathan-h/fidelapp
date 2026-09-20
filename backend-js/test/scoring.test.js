@@ -1,6 +1,13 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { shapeScore, strokeOrderScore, scoreAttempt, scoreAttemptMulti } from "../src/scoring.js";
+import { readFileSync, readdirSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { shapeScore, strokeOrderScore, scoreAttempt } from "../src/scoring.js";
+import { listAvailableCharacters, loadReference } from "../src/referenceLoader.js";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const MULTI_DIR = join(__dirname, "..", "src", "reference_data_multi");
 
 // small helpers for building strokes without hand-typing coordinate lists --
 // a straight segment sampled into `steps` points, {x, y} only since scoring.js
@@ -94,19 +101,37 @@ describe("scoreAttempt", () => {
   });
 });
 
-describe("scoreAttemptMulti", () => {
-  test("best-3-of-5: two bad reference samples don't drag down a genuinely good attempt", () => {
-    const goodSamples = [{ strokes: L_SHAPE }, { strokes: L_SHAPE }, { strokes: L_SHAPE }];
-    const badSamples = [{ strokes: HORIZONTAL_LINE }, { strokes: VERTICAL_LINE }];
-    const result = scoreAttemptMulti([...goodSamples, ...badSamples], L_SHAPE);
-    // averaging all 5 would pull this well below 95; best-3-of-5 should not
-    assert.ok(result.shapeScore >= 90);
-    assert.equal(result.perSampleScores.length, 5);
-  });
+// regression guard for the single-reference pass/fail path (see
+// scripts/validate-single-reference-scoring.js, which measured these baselines against
+// the current production data: ~93.5 average, ~2.5% of samples below the pass threshold).
+// thresholds below have headroom above that baseline, but would have caught the real
+// stroke-order-averaging bug that once dropped "pu"'s own-sample average from ~90 to ~29
+describe("shapeScore against real reference data", () => {
+  test("every character's consensus reference stays representative of its own recorded samples", () => {
+    const PER_CHARACTER_FLOOR = 60;
+    const OVERALL_FLOOR = 85;
 
-  test("no samples returns a zero score instead of throwing", () => {
-    const result = scoreAttemptMulti([], L_SHAPE);
-    assert.equal(result.shapeScore, 0);
-    assert.deepEqual(result.perSampleScores, []);
+    let overallTotal = 0;
+    let overallCount = 0;
+    const weakCharacters = [];
+
+    for (const romanization of listAvailableCharacters()) {
+      const consensus = loadReference(romanization);
+      const charDir = join(MULTI_DIR, romanization);
+      const sampleFiles = readdirSync(charDir).filter((f) => f.startsWith("sample_") && f.endsWith(".json"));
+
+      const scores = sampleFiles.map((file) => {
+        const sample = JSON.parse(readFileSync(join(charDir, file), "utf-8"));
+        return shapeScore(consensus.strokes, sample.strokes);
+      });
+
+      const charAvg = scores.reduce((a, b) => a + b, 0) / scores.length;
+      overallTotal += scores.reduce((a, b) => a + b, 0);
+      overallCount += scores.length;
+      if (charAvg < PER_CHARACTER_FLOOR) weakCharacters.push(`${romanization}: ${charAvg.toFixed(1)}`);
+    }
+
+    assert.deepEqual(weakCharacters, [], `character(s) whose own samples don't resemble their reference`);
+    assert.ok(overallTotal / overallCount >= OVERALL_FLOOR);
   });
 });

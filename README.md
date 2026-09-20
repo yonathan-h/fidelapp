@@ -10,7 +10,7 @@ Live: https://fidelapp-one.vercel.app
 
 Pick a character from the sidebar grid, which doubles as a progress heatmap and is laid out in the real traditional Fidel chart order. A demo plays once showing the character being drawn stroke by stroke at its actual recorded pace, then settles into a faint trace-over guide behind the canvas. Draw your attempt, hit check, and the app tells you if it passed or if you should try again, with specific feedback (wrong stroke count, reversed direction, which part of the shape didn't match).
 
-Scoring compares your strokes against five recorded samples of the correct character rather than just one, using a DTW-averaged consensus shape as the reference. This makes the system more forgiving of normal handwriting variation while still catching attempts that are genuinely wrong.
+Every character has one reference: a DTW-averaged consensus built from five independently recorded samples of it, rather than any single raw recording. Averaging cancels out each recording's own hand-tremor far better than smoothing one sample could, so this one reference is what the guide is drawn from, what feedback describes deviations against, and what your attempt is scored against for pass/fail -- one source of truth used everywhere, validated against the raw recordings it was built from (`scripts/validate-single-reference-scoring.js`) rather than assumed.
 
 Word/phrase practice uses one wide canvas holding every letter of the word, each with its own guide, chained into one continuous demo animation; checking splits your strokes back out per letter for scoring.
 
@@ -80,10 +80,11 @@ backend-js/
     reference_data_multi/  five raw recorded samples per character
     audio/                 generated pronunciation clips, one mp3 per character and word
   scripts/
-    regenerate-reference-averages.js   builds reference_data/ from the raw samples
-    validate-averaged-references.js    scores the result against real data, catches regressions
+    regenerate-reference-averages.js      builds reference_data/ from the raw samples
+    validate-averaged-references.js       scores the result against real data, catches regressions
+    validate-single-reference-scoring.js  validates the single reference as the pass/fail signal
     recorder-server.js + recorder-tool.html   local tool for recording new characters
-    generate-audio.js                  generates audio/ via Azure Neural TTS
+    generate-audio.js                     generates audio/ via Azure Neural TTS
 
 frontend/
   src/
