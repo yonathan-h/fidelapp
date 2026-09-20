@@ -1,6 +1,9 @@
-# Render Blueprint -- deploys the backend + a free Postgres database in one step.
-# In the Render dashboard: New > Blueprint > pick this repo. Render reads this file
-# automatically.
+# Render Blueprint -- deploys the backend web service. In the Render dashboard:
+# New > Blueprint > pick this repo. Render reads this file automatically.
+#
+# Postgres is hosted on Neon (neon.tech), not a Render-managed database -- Render's free
+# Postgres tier auto-expires (was fidel-db, hit this and had to migrate). Neon's free tier
+# idles on inactivity instead of expiring outright.
 services:
   - type: web
     name: fidel-backend
@@ -11,16 +14,10 @@ services:
     startCommand: node src/server.js
     envVars:
       - key: DATABASE_URL
-        fromDatabase:
-          name: fidel-db
-          property: connectionString
+        sync: false # set manually to the Neon connection string, see DEPLOY.md
       - key: SECRET_KEY
         generateValue: true # Render generates a random secure value, you never see/type it
       - key: CORS_ORIGINS
         sync: false # set manually after the frontend is deployed, see DEPLOY.md
       - key: PORT
         value: 8000
-
-databases:
-  - name: fidel-db
-    plan: free
