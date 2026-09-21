@@ -85,12 +85,16 @@
 </div>
 
 <script>
-// -- the 28 missing characters (4 families), grouped by family, in traditional
-// 1st/2nd/3rd/4th/5th/6th/7th order -- glyphs verified against standard Amharic
-// orthography and cross-checked for zero overlap with the existing 189-character
-// set before this tool was updated (see chat). Za is a core classical Ge'ez letter
-// (not an Amharic-only addition); Cha/Ch'a/Zha are the remaining Amharic-specific
-// additions not yet covered (Sha and Nya were already added in the previous batch).
+// -- the last batch recorded here: 28 characters (4 families), grouped by family, in
+// traditional 1st/2nd/3rd/4th/5th/6th/7th order -- glyphs verified against standard
+// Amharic orthography and cross-checked for zero overlap with the 189-character set
+// that existed before this tool was updated (see chat). Za is a core classical Ge'ez
+// letter (not an Amharic-only addition); Cha/Ch'a/Zha were the remaining Amharic-
+// specific additions (Sha and Nya were added in an earlier batch). All 28 are now
+// recorded and live -- replace this array the same way for the next gap found, which
+// as of this writing is labialized/"wa"-form glyphs (ቋ, ሷ, ጓ, etc., see project memory
+// or backend-js/src/words.js's header comment) -- a structurally bigger addition, not
+// just another flat 7-per-family list, so it needs its own scoping first.
 const FAMILIES = [
   { label: "Z", members: [
     ["ze", "ዘ"], ["zu", "ዙ"], ["zi", "ዚ"], ["za", "ዛ"], ["zee", "ዜ"], ["z", "ዝ"], ["zo", "ዞ"],
