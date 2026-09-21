@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/yonathan-h/fidelapp/actions/workflows/ci.yml/badge.svg)](https://github.com/yonathan-h/fidelapp/actions/workflows/ci.yml)
 
-Fidel is a web app for practicing Amharic handwriting. It covers 217 characters across all 31 consonant families of the Fidel script, plus curated word/phrase practice, with a tracing guide and a scoring system that checks both the shape of what you drew and the order of your strokes.
+Fidel is a web app for practicing Amharic handwriting. It covers 217 characters across all 31 consonant families of the Fidel script, plus 99 curated words and phrases across 13 categories, with a tracing guide and a scoring system that checks both the shape of what you drew and the order of your strokes.
 
 Live: https://fidelapp-one.vercel.app
 
