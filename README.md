@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/yonathan-h/fidelapp/actions/workflows/ci.yml/badge.svg)](https://github.com/yonathan-h/fidelapp/actions/workflows/ci.yml)
 
-Fidel is a web app for practicing Amharic handwriting. It covers 189 characters across all 27 consonant families of the Fidel script, plus curated word/phrase practice, with a tracing guide and a scoring system that checks both the shape of what you drew and the order of your strokes.
+Fidel is a web app for practicing Amharic handwriting. It covers 217 characters across all 31 consonant families of the Fidel script, plus curated word/phrase practice, with a tracing guide and a scoring system that checks both the shape of what you drew and the order of your strokes.
 
 Live: https://fidelapp-one.vercel.app
 
@@ -80,16 +80,16 @@ backend-js/
     reference_data_multi/  five raw recorded samples per character
     audio/                 generated pronunciation clips, one mp3 per character and word
   scripts/
-    regenerate-reference-averages.js      builds reference_data/ from the raw samples
-    validate-averaged-references.js       scores the result against real data, catches regressions
-    validate-single-reference-scoring.js  validates the single reference as the pass/fail signal
+    regenerate-reference-averages.js   builds reference_data/ from the raw samples
+    validate-averaged-references.js    scores the result against real data, catches regressions
+    audit-stroke-counts.js             checks stroke-count consistency across samples per character
     recorder-server.js + recorder-tool.html   local tool for recording new characters
-    generate-audio.js                     generates audio/ via Azure Neural TTS
+    generate-audio.js                  generates audio/ via Azure Neural TTS
 
 frontend/
   src/
     App.jsx              main app and all screens (character/word practice, auth, routing)
-    characterFamilies.js  the 27 families in real Fidel chart order (derived from Unicode)
+    characterFamilies.js  the 31 families in real Fidel chart order (derived from Unicode)
     strokeGeometry.js     stroke smoothing + demo animation timing
     api.js                calls to the backend
     useStrokeCanvas.js    captures drawing strokes from the canvas

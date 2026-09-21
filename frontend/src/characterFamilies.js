@@ -19,6 +19,12 @@
 // pharyngeal ḥa ሐ), s2 (2nd s, śa ሠ), a2 (2nd glottal, ʿayin ዐ), and ts2 (2nd tse,
 // ṣ́a ጸ). romanization for these uses a "2" suffix, same convention as the
 // pre-existing p/p2 pair (different glyph, same-ish sound).
+//
+// also includes the 4 families added after the 189-character set: z (ze ዘ, a core
+// classical Ge'ez letter, not an Amharic-only addition), ch (che ቸ), ch' (che' ጨ,
+// ejective -- apostrophe convention matches the pre-existing t'/te' pair), and zh
+// (zhe ዠ). insertion points for all 4 were computed from real codepoints (not
+// guessed) the same way the rest of this file's order was derived.
 export const CHARACTER_FAMILIES = [
   ["ha", "hu", "hi", "haa", "he", "h", "ho"],
   ["le", "lu", "li", "la", "lee", "l", "lo"],
@@ -31,17 +37,21 @@ export const CHARACTER_FAMILIES = [
   ["qe", "qu", "qi", "qa", "qee", "q", "qo"],
   ["be", "bu", "bi", "ba", "bee", "b", "bo"],
   ["te", "tu", "ti", "ta", "tee", "t", "to"],
+  ["che", "chu", "chi", "cha", "chee", "ch", "cho"],
   ["ne", "nu", "ni", "na", "nee", "n", "no"],
   ["nye", "nyu", "nyi", "nya", "nyee", "ny", "nyo"],
   ["a", "u", "i", "aa", "e", "ie", "o"],
   ["ke", "ku", "ki", "ka", "kee", "k", "ko"],
   ["we", "wu", "wi", "wa", "wee", "w", "wo"],
   ["a2", "u2", "i2", "aa2", "e2", "ie2", "o2"],
+  ["ze", "zu", "zi", "za", "zee", "z", "zo"],
+  ["zhe", "zhu", "zhi", "zha", "zhee", "zh", "zho"],
   ["ye", "yu", "yi", "ya", "yee", "y", "yo"],
   ["de", "du", "di", "da", "dee", "d", "do"],
   ["je", "ju", "ji", "ja", "jee", "j", "jo"],
   ["ge", "gu", "gi", "ga", "gee", "g", "go"],
   ["te'", "tu'", "ti'", "ta'", "te'e", "t'", "to'"],
+  ["che'", "chu'", "chi'", "cha'", "che'e", "ch'", "cho'"],
   ["pe", "pu", "pi", "pa", "pee", "p", "po"],
   ["tse2", "tsu2", "tsi2", "tsa2", "tsee2", "ts2", "tso2"],
   ["tse", "tsu", "tsi", "tsa", "tsee", "ts", "tso"],

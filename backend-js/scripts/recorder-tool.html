@@ -85,28 +85,24 @@
 </div>
 
 <script>
-// -- the 42 missing characters, grouped by family, in the app's established order
-// (1st, 2nd, 3rd, 4th, 5th, 6th, 7th traditional order) -- glyphs + codepoint order
-// verified against Wikipedia's Ge'ez script tables and cross-checked for zero overlap
-// with the existing 147-character set before this tool was built (see chat).
+// -- the 28 missing characters (4 families), grouped by family, in traditional
+// 1st/2nd/3rd/4th/5th/6th/7th order -- glyphs verified against standard Amharic
+// orthography and cross-checked for zero overlap with the existing 189-character
+// set before this tool was updated (see chat). Za is a core classical Ge'ez letter
+// (not an Amharic-only addition); Cha/Ch'a/Zha are the remaining Amharic-specific
+// additions not yet covered (Sha and Nya were already added in the previous batch).
 const FAMILIES = [
-  { label: "K", members: [
-    ["ke", "ከ"], ["ku", "ኩ"], ["ki", "ኪ"], ["ka", "ካ"], ["kee", "ኬ"], ["k", "ክ"], ["ko", "ኮ"],
+  { label: "Z", members: [
+    ["ze", "ዘ"], ["zu", "ዙ"], ["zi", "ዚ"], ["za", "ዛ"], ["zee", "ዜ"], ["z", "ዝ"], ["zo", "ዞ"],
   ]},
-  { label: "NY", members: [
-    ["nye", "ኘ"], ["nyu", "ኙ"], ["nyi", "ኚ"], ["nya", "ኛ"], ["nyee", "ኜ"], ["ny", "ኝ"], ["nyo", "ኞ"],
+  { label: "CH", members: [
+    ["che", "ቸ"], ["chu", "ቹ"], ["chi", "ቺ"], ["cha", "ቻ"], ["chee", "ቼ"], ["ch", "ች"], ["cho", "ቾ"],
   ]},
-  { label: "H2 (2nd h, pharyngeal)", members: [
-    ["he2", "ሐ"], ["hu2", "ሑ"], ["hi2", "ሒ"], ["ha2", "ሓ"], ["hee2", "ሔ"], ["h2", "ሕ"], ["ho2", "ሖ"],
+  { label: "CH' (ejective)", members: [
+    ["che'", "ጨ"], ["chu'", "ጩ"], ["chi'", "ጪ"], ["cha'", "ጫ"], ["che'e", "ጬ"], ["ch'", "ጭ"], ["cho'", "ጮ"],
   ]},
-  { label: "S2 (2nd s)", members: [
-    ["se2", "ሠ"], ["su2", "ሡ"], ["si2", "ሢ"], ["sa2", "ሣ"], ["see2", "ሤ"], ["s2", "ሥ"], ["so2", "ሦ"],
-  ]},
-  { label: "A2 (ayin, 2nd glottal)", members: [
-    ["a2", "ዐ"], ["u2", "ዑ"], ["i2", "ዒ"], ["aa2", "ዓ"], ["e2", "ዔ"], ["ie2", "ዕ"], ["o2", "ዖ"],
-  ]},
-  { label: "TS2 (2nd tse)", members: [
-    ["tse2", "ጸ"], ["tsu2", "ጹ"], ["tsi2", "ጺ"], ["tsa2", "ጻ"], ["tsee2", "ጼ"], ["ts2", "ጽ"], ["tso2", "ጾ"],
+  { label: "ZH", members: [
+    ["zhe", "ዠ"], ["zhu", "ዡ"], ["zhi", "ዢ"], ["zha", "ዣ"], ["zhee", "ዤ"], ["zh", "ዥ"], ["zho", "ዦ"],
   ]},
 ];
 
