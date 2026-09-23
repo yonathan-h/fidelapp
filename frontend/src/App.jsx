@@ -1006,7 +1006,7 @@ function PracticeApp() {
           {mode === "characters" && (
             <>
               <div
-                style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", marginBottom: "-6px" }}
+                style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", marginBottom: "-6px", position: "relative", zIndex: 1 }}
               >
                 <div className="glyph-caption" style={{ fontSize: "16px" }}>
                   {currentRomanization}
